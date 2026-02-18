@@ -85,7 +85,7 @@ button.primary{background:#2563eb;padding:12px;border:0;margin-top:10px;color:#f
 </div>
 
 <script>
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+const API_BASE = `${window.location.origin}/api`;
 
 function show(id){
 document.querySelectorAll(".page").forEach(p=>p.style.display="none")
@@ -168,6 +168,10 @@ chat.innerHTML+="<b>AI:</b> Server error, we will fix soon.<br><br>"
 
 async function startVoice(){
 let rid=voiceRid.value
+if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+alert("Voice requires HTTPS (or localhost) with microphone access.");
+return;
+}
 
 const tokenResponse = await fetch(`${API_BASE}/voice-session?restaurant_id=${rid}`);
 const session = await tokenResponse.json();
@@ -199,3 +203,4 @@ load()
 </script>
 </body>
 </html>
+

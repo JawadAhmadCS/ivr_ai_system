@@ -1004,7 +1004,7 @@
 </div>
 
 <script>
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+const API_BASE = `${window.location.origin}/api`;
 let restaurantsCache = [];
 let selectedId = null;
 
@@ -1367,6 +1367,10 @@ async function sendChat() {
 // Voice
 async function startVoice() {
   if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Voice requires HTTPS (or localhost) with microphone access.', 'error');
+    return;
+  }
   const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
   const btn = document.getElementById('voiceBtn');
 
@@ -1416,3 +1420,4 @@ loadLogs();
 </script>
 </body>
 </html>
+

@@ -1,5 +1,5 @@
 
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+const API_BASE = `${window.location.origin}/api`;
 
 async function loadStats(){
 let r = await fetch(`${API_BASE}/dashboard/stats`)
@@ -13,3 +13,4 @@ Avg Duration: ${data.avg_duration}
 `
 }
 loadStats()
+
