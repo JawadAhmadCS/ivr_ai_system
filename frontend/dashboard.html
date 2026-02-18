@@ -3,78 +3,19 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI Call Admin Dashboard</title>
+<title>AI Call Center Dashboard</title>
 
 <style>
-body{
-margin:0;
-font-family:Arial;
-background:#0f172a;
-color:#fff;
-}
-
-.sidebar{
-width:240px;
-background:#020617;
-height:100vh;
-position:fixed;
-padding:20px;
-}
-
+body{margin:0;font-family:Arial;background:#0f172a;color:#fff}
+.sidebar{width:240px;background:#020617;height:100vh;position:fixed;padding:20px}
 .sidebar h2{margin-bottom:30px}
-.sidebar button{
-display:block;
-width:100%;
-margin:8px 0;
-padding:12px;
-background:#111827;
-border:none;
-color:#fff;
-cursor:pointer;
-text-align:left;
-}
-
-.main{
-margin-left:260px;
-padding:30px;
-}
-
-.card{
-background:#020617;
-padding:20px;
-margin-bottom:20px;
-border-radius:10px;
-}
-
-input,textarea,select{
-width:100%;
-padding:10px;
-margin-top:10px;
-background:#020617;
-border:1px solid #333;
-color:#fff;
-}
-
-button.primary{
-background:#2563eb;
-padding:12px;
-border:none;
-margin-top:10px;
-cursor:pointer;
-}
-
-#chatbox{
-height:260px;
-overflow:auto;
-background:#000;
-padding:10px;
-margin-bottom:10px;
-}
-
-.stat{
-font-size:26px;
-font-weight:bold;
-}
+.sidebar button{display:block;width:100%;margin:8px 0;padding:12px;background:#111827;border:none;color:#fff;cursor:pointer;text-align:left}
+.main{margin-left:260px;padding:30px}
+.card{background:#020617;padding:20px;margin-bottom:20px;border-radius:10px}
+input,textarea{width:100%;padding:10px;margin-top:10px;background:#020617;border:1px solid #333;color:#fff}
+button.primary{background:#2563eb;padding:12px;border:none;margin-top:10px;cursor:pointer}
+#chatbox{height:250px;overflow:auto;background:#000;padding:10px;margin-top:10px}
+.restaurantBox{border:1px solid #333;padding:15px;margin-top:15px}
 </style>
 
 </head>
@@ -83,9 +24,8 @@ font-weight:bold;
 
 <div class="sidebar">
 <h2>AI Admin</h2>
-
-<button onclick="show('dashboard')">Dashboard</button> <button onclick="show('restaurants')">Restaurants</button> <button onclick="show('ivr')">IVR & Voice</button> <button onclick="show('calls')">Call Logs</button> <button onclick="show('ai')">AI Chat</button> <button onclick="show('voice')">Voice Test</button>
-
+<button onclick="show('dashboard')">Dashboard</button>
+<button onclick="show('restaurants')">Restaurants + Agents</button>
 </div>
 
 <div class="main">
@@ -93,147 +33,150 @@ font-weight:bold;
 <!-- DASHBOARD -->
 
 <div id="dashboard" class="page">
-<div class="card"><div class="stat" id="rCount">0</div>Active Restaurants</div>
-<div class="card"><div class="stat" id="callCount">0</div>Total Calls Today</div>
-<div class="card"><div class="stat" id="missed">0</div>Missed Calls</div>
-<div class="card"><div class="stat" id="avg">0s</div>Avg Duration</div>
-<div class="card"><div class="stat" id="api">0</div>API Usage</div>
-<div class="card"><div class="stat" id="cost">$0</div>Usage Cost</div>
+<div class="card"><h2>System Overview</h2>
+Active Restaurants: <b id="rCount">0</b><br>
+</div>
 </div>
 
 <!-- RESTAURANTS -->
 
 <div id="restaurants" class="page" style="display:none">
+
 <div class="card">
-<h3>Add Restaurant</h3>
+<h3>Add New Restaurant</h3>
 <input id="rname" placeholder="Restaurant name">
 <input id="rphone" placeholder="Phone">
-<textarea id="ivrtext" placeholder="IVR Hebrew text"></textarea>
-<button class="primary" onclick="addRestaurant()">Add</button>
+<textarea id="rprompt" placeholder="Agent prompt (Hebrew etc)"></textarea>
+<button class="primary" onclick="addRestaurant()">Create Restaurant</button>
 </div>
 
 <div class="card">
-<h3>Restaurant List</h3>
+<h3>All Restaurants & Agents</h3>
 <div id="rlist"></div>
 </div>
-</div>
 
-<!-- IVR -->
-
-<div id="ivr" class="page" style="display:none">
-<div class="card">
-<h3>IVR Flow Config</h3>
-<textarea placeholder="Edit Hebrew voice flow"></textarea>
-<button class="primary">Save Flow</button>
-<button class="primary">Live Call Test</button>
-</div>
-</div>
-
-<!-- CALL LOGS -->
-
-<div id="calls" class="page" style="display:none">
-<div class="card">
-<h3>Call Logs</h3>
-<div id="calllogs">No logs yet</div>
-</div>
-</div>
-
-<!-- AI CHAT -->
-
-<div id="ai" class="page" style="display:none">
-<div class="card">
-<h3>AI Chat Test</h3>
-
-<div id="chatbox"></div>
-<input id="msg" placeholder="Type message">
-<button class="primary" onclick="sendChat()">Send</button>
-</div>
-</div>
-
-<!-- VOICE -->
-
-<div id="voice" class="page" style="display:none">
-<div class="card">
-<h3>Realtime Voice Test</h3>
-<button class="primary" onclick="startVoice()">Start Talking</button>
-</div>
 </div>
 
 </div>
 
 <script>
+let DEFAULT_PROMPT="You are a restaurant AI call assistant. Speak Hebrew. Short replies.";
 let restaurants=[];
+let selectedRestaurant=null;
 
 function show(id){
 document.querySelectorAll(".page").forEach(p=>p.style.display="none")
 document.getElementById(id).style.display="block"
 }
 
-/* dummy stats */
-setInterval(()=>{
-document.getElementById("rCount").innerText = restaurants.length
-document.getElementById("callCount").innerText = Math.floor(Math.random()*20)
-document.getElementById("missed").innerText = Math.floor(Math.random()*5)
-document.getElementById("avg").innerText = Math.floor(Math.random()*60)+"s"
-document.getElementById("api").innerText = Math.floor(Math.random()*200)
-document.getElementById("cost").innerText = "$"+Math.floor(Math.random()*10)
-},2000)
-
-/* restaurant add */
+/* add restaurant */
 function addRestaurant(){
-let n=document.getElementById("rname").value
-let p=document.getElementById("rphone").value
-let t=document.getElementById("ivrtext").value
+let name=document.getElementById("rname").value
+let phone=document.getElementById("rphone").value
+let prompt=document.getElementById("rprompt").value || DEFAULT_PROMPT
 
-if(!n) return alert("enter name")
+if(!name) return alert("Enter name")
 
-restaurants.push({name:n,phone:p,ivr:t,active:true})
+restaurants.push({
+name:name,
+phone:phone,
+prompt:prompt,
+active:true
+})
+
 renderRestaurants()
+updateStats()
 }
 
+/* render */
 function renderRestaurants(){
 let html=""
+
 restaurants.forEach((r,i)=>{
 html+=`
-<div style="padding:10px;border-bottom:1px solid #333">
-<b>${r.name}</b> (${r.phone})
-<button onclick="toggle(${i})">ON/OFF</button>
-<button onclick="delR(${i})">Delete</button>
-</div>`
+<div class="restaurantBox">
+
+<b>${r.name}</b> (${r.phone})<br><br>
+
+<b>Agent Prompt:</b>
+<textarea id="prompt${i}">${r.prompt}</textarea>
+
+<button onclick="savePrompt(${i})">Save Prompt</button> <button onclick="selectRestaurant(${i})">Use This Agent</button> <button onclick="deleteRestaurant(${i})">Delete</button>
+
+<hr>
+
+<b>AI Chat Test</b>
+
+<div id="chat${i}" style="height:150px;overflow:auto;background:#000;padding:8px"></div>
+<input id="msg${i}" placeholder="type message">
+<button onclick="sendChat(${i})">Send</button>
+
+<br><br> <b>Voice Test</b><br> <button onclick="startVoice(${i})">Start Talking</button>
+
+</div>
+`
 })
+
 document.getElementById("rlist").innerHTML=html
 }
 
-function toggle(i){
-restaurants[i].active=!restaurants[i].active
-renderRestaurants()
+/* save prompt */
+function savePrompt(i){
+restaurants[i].prompt=document.getElementById("prompt"+i).value
+alert("Prompt updated")
 }
 
-function delR(i){
+/* select */
+function selectRestaurant(i){
+selectedRestaurant=restaurants[i]
+alert("Active agent: "+selectedRestaurant.name)
+}
+
+/* delete */
+function deleteRestaurant(i){
 restaurants.splice(i,1)
 renderRestaurants()
+updateStats()
 }
 
-/* AI CHAT */
-async function sendChat(){
-let msg=document.getElementById("msg").value
+/* stats */
+function updateStats(){
+document.getElementById("rCount").innerText=restaurants.length
+}
+
+/* CHAT */
+async function sendChat(i){
+let msg=document.getElementById("msg"+i).value
 if(!msg) return
 
-chatbox.innerHTML += "<b>You:</b> "+msg+"<br>"
+let chatBox=document.getElementById("chat"+i)
+chatBox.innerHTML+="<b>You:</b> "+msg+"<br>"
 
 let r = await fetch("http://localhost:5050/chat",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify({message:msg})
+body:JSON.stringify({
+message:msg,
+system_prompt:restaurants.prompt
+})
 })
 
 let data = await r.json()
-chatbox.innerHTML += "<b>AI:</b> "+data.reply+"<br><br>"
+chatBox.innerHTML+="<b>AI:</b> "+data.reply+"<br><br>"
+chatBox.scrollTop=chatBox.scrollHeight
 }
 
 /* VOICE */
-async function startVoice(){
-const tokenResponse = await fetch("http://localhost:5050/voice-session");
+async function startVoice(i){
+
+const tokenResponse = await fetch("http://localhost:5050/voice-session",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+system_prompt:restaurants.prompt
+})
+});
+
 const session = await tokenResponse.json();
 const EPHEMERAL_KEY = session.client_secret.value;
 
@@ -264,7 +207,7 @@ Authorization:`Bearer ${EPHEMERAL_KEY}`,
 const answer={type:"answer",sdp:await sdpResponse.text()}
 await pc.setRemoteDescription(answer);
 }
-</script>
 
+</script>
 </body>
 </html>

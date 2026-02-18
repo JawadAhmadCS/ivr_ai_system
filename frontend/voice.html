@@ -1,63 +1,192 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Voice AI</title>
+<title>AI Admin</title>
 <style>
-body{background:#111;color:#fff;font-family:arial;padding:40px}
-button{padding:15px;font-size:18px}
+body{background:#0f172a;color:#fff;font-family:arial;margin:0}
+.sidebar{width:250px;height:100vh;background:#020617;position:fixed;padding:20px}
+.sidebar button{width:100%;margin:6px 0;padding:12px;background:#111827;border:0;color:#fff;cursor:pointer}
+.main{margin-left:270px;padding:30px}
+.card{background:#020617;padding:20px;margin-bottom:20px;border-radius:10px}
+textarea,input{width:100%;padding:10px;margin-top:10px;background:#000;color:#fff;border:1px solid #333}
+button.primary{background:#2563eb;padding:12px;border:0;margin-top:10px;color:#fff;cursor:pointer}
+#chat{height:200px;overflow:auto;background:#000;padding:10px}
 </style>
 </head>
+
 <body>
 
-<h2>Realtime Voice AI</h2>
-<button onclick="start()">Start Talking</button>
+<div class="sidebar">
+<h2>Admin</h2>
+<button onclick="show('dashboard')">Dashboard</button> 
+<button onclick="show('restaurants')">Restaurants</button>
+<button onclick="show('calls')">Call Logs</button>
+<button onclick="show('ai')">AI Chat</button>
+<button onclick="show('voice')">Voice Test</button>
+</div>
+
+<div class="main">
+
+<!-- CALL LOGS -->
+
+<div id="calls" class="page" style="display:none">
+<div class="card">
+<h3>Call Logs</h3>
+<div id="calllogs">No logs yet</div>
+</div>
+</div>
+
+<!-- DASHBOARD -->
+
+<div id="dashboard" class="page">
+<div class="card"><div class="stat" id="rCount">0</div>Active Restaurants</div>
+<div class="card"><div class="stat" id="callCount">0</div>Total Calls Today</div>
+<div class="card"><div class="stat" id="missed">0</div>Missed Calls</div>
+<div class="card"><div class="stat" id="avg">0s</div>Avg Duration</div>
+<div class="card"><div class="stat" id="api">0</div>API Usage</div>
+<div class="card"><div class="stat" id="cost">$0</div>Usage Cost</div>
+</div>
+
+<div id="restaurants" class="page">
+<div class="card">
+<h3>Create Restaurant Agent</h3>
+<textarea id="newPrompt" placeholder="Restaurant system prompt"></textarea>
+<button class="primary" onclick="createR()">Create</button>
+</div>
+
+<div class="card">
+<h3>Default Prompt (all)</h3>
+<textarea id="defaultPrompt"></textarea>
+<button class="primary" onclick="updateDefault()">Update Default</button>
+</div>
+
+<div class="card">
+<h3>Restaurant List</h3>
+<div id="list"></div>
+</div>
+</div>
+
+<div id="ai" class="page" style="display:none">
+<div class="card">
+<select id="ridSelect"></select>
+<div id="chat"></div>
+<input id="msg">
+<button onclick="sendChat()">Send</button>
+</div>
+</div>
+
+<div id="voice" class="page" style="display:none">
+<div class="card">
+<select id="voiceRid"></select>
+<button onclick="startVoice()">Start Voice</button>
+</div>
+</div>
+
+</div>
 
 <script>
-let pc;
-let dc;
+function show(id){
+document.querySelectorAll(".page").forEach(p=>p.style.display="none")
+document.getElementById(id).style.display="block"
+}
 
-async function start(){
+async function load(){
+let r = await fetch("http://localhost:5050/restaurants")
+let data = await r.json()
 
-const tokenResponse = await fetch("http://localhost:5050/voice-session");
+defaultPrompt.value = data.default_prompt
+
+let html=""
+ridSelect.innerHTML=""
+voiceRid.innerHTML=""
+
+for(let id in data.restaurants){
+let p = data.restaurants[id]
+
+html+=`
+<div style="border-bottom:1px solid #333;padding:10px">
+<b>ID:</b> ${id}
+<textarea onchange="updatePrompt('${id}',this.value)">${p}</textarea>
+</div>`
+
+ridSelect.innerHTML+=`<option value="${id}">${id}</option>`
+voiceRid.innerHTML+=`<option value="${id}">${id}</option>`
+}
+
+list.innerHTML=html
+}
+
+async function createR(){
+let prompt=newPrompt.value
+await fetch("http://localhost:5050/restaurant/create",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({prompt})
+})
+load()
+}
+
+async function updatePrompt(id,prompt){
+await fetch("http://localhost:5050/restaurant/update",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({id,prompt})
+})
+}
+
+async function updateDefault(){
+await fetch("http://localhost:5050/default/update",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({prompt:defaultPrompt.value})
+})
+}
+
+async function sendChat(){
+let msg=document.getElementById("msg").value
+let rid=ridSelect.value
+
+chat.innerHTML+="<b>You:</b>"+msg+"<br>"
+
+let r=await fetch("http://localhost:5050/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:msg,restaurant_id:rid})
+})
+let d=await r.json()
+chat.innerHTML+="<b>AI:</b>"+d.reply+"<br><br>"
+}
+
+async function startVoice(){
+let rid=voiceRid.value
+
+const tokenResponse = await fetch(`http://localhost:5050/voice-session?restaurant_id=${rid}`);
 const session = await tokenResponse.json();
-
 const EPHEMERAL_KEY = session.client_secret.value;
 
-pc = new RTCPeerConnection();
+const pc = new RTCPeerConnection();
+const audioEl=document.createElement("audio");audioEl.autoplay=true;
+pc.ontrack=e=>audioEl.srcObject=e.streams[0];
 
-const audioEl = document.createElement("audio");
-audioEl.autoplay = true;
-pc.ontrack = e => audioEl.srcObject = e.streams[0];
+const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+stream.getTracks().forEach(track=>pc.addTrack(track,stream));
 
-const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-dc = pc.createDataChannel("oai-events");
-dc.onmessage = e => console.log("AI:", e.data);
-
-const offer = await pc.createOffer();
+const offer=await pc.createOffer();
 await pc.setLocalDescription(offer);
 
-const baseUrl = "https://api.openai.com/v1/realtime";
-const model = "gpt-4o-realtime-preview";
+const baseUrl="https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
 
-const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+const sdpResponse=await fetch(baseUrl,{
 method:"POST",
-body: offer.sdp,
-headers:{
-Authorization: `Bearer ${EPHEMERAL_KEY}`,
-"Content-Type":"application/sdp"
-},
+body:offer.sdp,
+headers:{Authorization:`Bearer ${EPHEMERAL_KEY}`,"Content-Type":"application/sdp"}
 });
 
-const answer = {
-type:"answer",
-sdp: await sdpResponse.text()
-};
-
+const answer={type:"answer",sdp:await sdpResponse.text()}
 await pc.setRemoteDescription(answer);
 }
-</script>
 
+load()
+</script>
 </body>
 </html>
