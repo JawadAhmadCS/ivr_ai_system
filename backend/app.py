@@ -159,7 +159,31 @@ async def chat_with_ai(data: dict):
             json=payload
         )
 
-    reply = r.json()["choices"][0]["message"]["content"]
+    try:
+        body = r.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Invalid response from OpenAI API")
+
+    if r.status_code >= 400:
+        error_message = ""
+        if isinstance(body, dict):
+            error_message = body.get("error", {}).get("message", "")
+        if not error_message:
+            error_message = r.text[:300]
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI API error ({r.status_code}): {error_message}"
+        )
+
+    choices = body.get("choices") if isinstance(body, dict) else None
+    if not choices or not isinstance(choices, list):
+        raise HTTPException(status_code=502, detail="OpenAI response missing choices")
+
+    message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+    reply = message.get("content", "")
+    if not isinstance(reply, str):
+        reply = str(reply)
+
     return {"reply": reply}
 
 @app.post("/voice-session")
