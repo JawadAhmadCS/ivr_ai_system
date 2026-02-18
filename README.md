@@ -12,8 +12,16 @@ cd backend
 python app.py
 ```
 
-5. Phir frontend me jaa kar `frontend/dashboard.html` open karein.
-6. Dashboard ke through aap system use kar sakte hain.
+5. Phir frontend server start karein:
+
+```powershell
+cd frontend
+python -m http.server 8000
+```
+
+6. Browser me ye URL open karein: `http://localhost:8000/dashboard.html`
+7. Dashboard ke through aap system use kar sakte hain.
+8. Note (local): frontend `8000` par chalta hai aur API calls backend `http://localhost:5050` par jati hain, isliye backend process running hona chahiye.
 
 ## Frontend Server (VPS)
 
