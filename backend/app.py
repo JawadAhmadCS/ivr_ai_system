@@ -6,14 +6,14 @@ import websockets
 from fastapi import FastAPI, WebSocket, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
-from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
+from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream, Hangup
 from dotenv import load_dotenv
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import json
 from pathlib import Path
-from database import engine
+from database import engine, SessionLocal
 import models
 from routes import restaurant, call_logs, dashboard, prompt
 
@@ -74,8 +74,32 @@ if not OPENAI_API_KEY:
 async def index_page():
     return {"message": "Twilio Media Stream Server is running!"}
 
+def get_restaurant_prompt(restaurant_id: int | None) -> str:
+    global_prompt = load_global_prompt()
+    if not restaurant_id:
+        return global_prompt
+    db = SessionLocal()
+    try:
+        r = db.get(models.Restaurant, restaurant_id)
+        if not r or not r.active:
+            return global_prompt
+        if r.ivr_text and r.ivr_text.strip():
+            return f"{global_prompt}\n{r.ivr_text.strip()}"
+        return global_prompt
+    finally:
+        db.close()
+
+def restaurant_exists_and_active(restaurant_id: int) -> bool:
+    db = SessionLocal()
+    try:
+        r = db.get(models.Restaurant, restaurant_id)
+        return bool(r and r.active)
+    finally:
+        db.close()
+
 @app.api_route("/incoming-call", methods=["GET", "POST"])
-async def handle_incoming_call(request: Request):
+@app.api_route("/incoming-call/{restaurant_id}", methods=["GET", "POST"])
+async def handle_incoming_call(request: Request, restaurant_id: int | None = None):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
     response = VoiceResponse()
     # # # <Say> punctuation to improve text-to-speech flow
@@ -88,9 +112,22 @@ async def handle_incoming_call(request: Request):
     #     "O.K. you can start talking!",
     #     voice="Google.en-US-Chirp3-HD-Aoede"
     # )
+    if restaurant_id is None:
+        q_id = request.query_params.get("restaurant_id")
+        if q_id and q_id.isdigit():
+            restaurant_id = int(q_id)
+
+    if restaurant_id is not None and not restaurant_exists_and_active(restaurant_id):
+        response.say("Invalid restaurant id. Please contact support.", voice="alice")
+        response.append(Hangup())
+        return HTMLResponse(content=str(response), media_type="application/xml")
+
     host = request.url.hostname
     connect = Connect()
-    connect.stream(url=f'wss://{host}/media-stream')
+    if restaurant_id is not None:
+        connect.stream(url=f"wss://{host}/media-stream?restaurant_id={restaurant_id}")
+    else:
+        connect.stream(url=f"wss://{host}/media-stream")
     response.append(connect)
     return HTMLResponse(content=str(response), media_type="application/xml")
 
@@ -156,6 +193,9 @@ def create_voice_session(data: dict):
 async def handle_media_stream(websocket: WebSocket):
     """Handle WebSocket connections between Twilio and OpenAI."""
     print("Client connected")
+    q_id = websocket.query_params.get("restaurant_id")
+    restaurant_id = int(q_id) if q_id and q_id.isdigit() else None
+    instructions = get_restaurant_prompt(restaurant_id)
     await websocket.accept()
 
     async with websockets.connect(
@@ -164,7 +204,7 @@ async def handle_media_stream(websocket: WebSocket):
             "Authorization": f"Bearer {OPENAI_API_KEY}"
         }
     ) as openai_ws:
-        await initialize_session(openai_ws)
+        await initialize_session(openai_ws, instructions)
 
         # Connection specific state
         stream_sid = None
@@ -299,7 +339,7 @@ async def send_initial_conversation_item(openai_ws):
     await openai_ws.send(json.dumps({"type": "response.create"}))
 
 
-async def initialize_session(openai_ws):
+async def initialize_session(openai_ws, instructions: str):
     """Control initial session with OpenAI."""
     session_update = {
         "type": "session.update",
@@ -317,7 +357,7 @@ async def initialize_session(openai_ws):
                     "voice": VOICE
                 }
             },
-            "instructions": load_global_prompt(),
+            "instructions": instructions,
         }
     }
     print('Sending session update:', json.dumps(session_update))

@@ -758,6 +758,13 @@
     grid-template-columns: 1fr 1fr;
     gap: 12px;
   }
+
+  .twilio-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
 </style>
 </head>
 <body>
@@ -1029,6 +1036,47 @@ function esc(v) {
   }[m]));
 }
 
+function normalizeBaseUrl(url) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/\/+$/, '');
+}
+
+function getPublicBaseUrl() {
+  const stored = localStorage.getItem('twilioBaseUrl');
+  return normalizeBaseUrl(stored || '');
+}
+
+function setPublicBaseUrl(url) {
+  const normalized = normalizeBaseUrl(url);
+  localStorage.setItem('twilioBaseUrl', normalized);
+  return normalized;
+}
+
+function buildTwilioUrl(restaurantId) {
+  const base = getPublicBaseUrl() || API_BASE;
+  const cleanBase = normalizeBaseUrl(base);
+  return `${cleanBase}/incoming-call/${restaurantId}`;
+}
+
+function refreshTwilioUrl(restaurantId) {
+  const urlEl = document.getElementById('twilioUrl');
+  if (!urlEl) return;
+  urlEl.value = buildTwilioUrl(restaurantId);
+}
+
+function copyTwilioUrl() {
+  const urlEl = document.getElementById('twilioUrl');
+  if (!urlEl) return;
+  urlEl.select();
+  urlEl.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(urlEl.value).then(() => {
+    toast('Twilio URL copied');
+  }).catch(() => {
+    toast('Copy failed', 'error');
+  });
+}
+
 function toggleCreate() {
   const box = document.getElementById('createBox');
   if (!box) return;
@@ -1237,6 +1285,22 @@ function openRestaurant(id, silent) {
       <button class="voice-btn" id="voiceBtn" onclick="startVoice()">
         🎙️ Start Voice Session
       </button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Twilio Webhook</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Paste this URL in Twilio → A Call Comes In.</p>
+      <div class="form-group">
+        <label class="form-label">Public Base URL (ngrok/hosted)</label>
+        <input id="twilioBaseUrl" placeholder="https://xxxx.ngrok-free.app" value="${esc(getPublicBaseUrl())}" onblur="setPublicBaseUrl(this.value); refreshTwilioUrl(${r.id});">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Twilio Webhook URL</label>
+        <div class="twilio-row">
+          <input id="twilioUrl" readonly value="${esc(buildTwilioUrl(r.id))}">
+          <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">Copy</button>
+        </div>
+      </div>
     </div>
   `;
 
