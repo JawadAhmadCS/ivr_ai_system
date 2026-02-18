@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+import json
+from pathlib import Path
+from database import engine
+import models
+from routes import restaurant, call_logs, dashboard, prompt
 
 load_dotenv()
 
@@ -19,13 +24,23 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 TEMPERATURE = float(os.getenv('TEMPERATURE', 0.3))
 # "Always respond in Hebrew & instantly. "
-SYSTEM_MESSAGE = (
-"You are a real-time phone call assistant. "
-"Use very short sentences. "
-"First reply must be under five words. "
-"Be conversational and human. "
-"No symbols or emojis."
-)
+BASE_DIR = Path(__file__).resolve().parent
+PROMPT_DIR = BASE_DIR / "prompts"
+GLOBAL_FILE = PROMPT_DIR / "global_prompt.txt"
+RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
+
+def load_global_prompt():
+    if GLOBAL_FILE.exists():
+        return GLOBAL_FILE.read_text(encoding="utf-8")
+    return "You are a restaurant AI assistant."
+
+def load_restaurants():
+    if RESTAURANT_FILE.exists():
+        with open(RESTAURANT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
 VOICE = 'alloy'
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',
@@ -45,6 +60,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+models.Base.metadata.create_all(bind=engine)
+
+app.include_router(restaurant.router)
+app.include_router(call_logs.router)
+app.include_router(dashboard.router)
+app.include_router(prompt.router)
 
 if not OPENAI_API_KEY:
     raise ValueError('Missing the OpenAI API key. Please set it in the .env file.')
@@ -76,7 +97,10 @@ async def handle_incoming_call(request: Request):
 @app.post("/chat")
 async def chat_with_ai(data: dict):
     user_msg = data.get("message", "")
-    dynamic_prompt = data.get("system_prompt", SYSTEM_MESSAGE)
+    restaurant_prompt = data.get("restaurant_prompt", "")
+
+    global_prompt = load_global_prompt()
+    final_prompt = global_prompt + "\n" + restaurant_prompt
 
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -86,7 +110,7 @@ async def chat_with_ai(data: dict):
     payload = {
         "model": "gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": dynamic_prompt},
+            {"role": "system", "content": final_prompt},
             {"role": "user", "content": user_msg}
         ]
     }
@@ -104,7 +128,10 @@ async def chat_with_ai(data: dict):
 @app.post("/voice-session")
 def create_voice_session(data: dict):
     try:
-        dynamic_prompt = data.get("system_prompt", SYSTEM_MESSAGE)
+        restaurant_prompt = data.get("restaurant_prompt", "")
+        global_prompt = load_global_prompt()
+        final_prompt = global_prompt + "\n" + restaurant_prompt
+
 
         url = "https://api.openai.com/v1/realtime/sessions"
         headers = {
@@ -115,7 +142,7 @@ def create_voice_session(data: dict):
         payload = {
             "model": "gpt-4o-realtime-preview",
             "voice": "alloy",
-            "instructions": dynamic_prompt
+            "instructions": final_prompt
         }
 
         r = requests.post(url, headers=headers, json=payload)
@@ -290,7 +317,7 @@ async def initialize_session(openai_ws):
                     "voice": VOICE
                 }
             },
-            "instructions": SYSTEM_MESSAGE,
+            "instructions": load_global_prompt(),
         }
     }
     print('Sending session update:', json.dumps(session_update))

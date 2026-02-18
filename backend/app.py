@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 import models
-from routes import restaurant, call_logs, dashboard
+from routes import restaurant, call_logs, dashboard, prompt
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(restaurant.router)
 app.include_router(call_logs.router)
 app.include_router(dashboard.router)
+app.include_router(prompt.router)
 
 @app.get("/")
 def root():

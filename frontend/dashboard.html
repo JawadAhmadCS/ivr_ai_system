@@ -1,212 +1,286 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI Call Center Dashboard</title>
-
+<title>AI Restaurant SaaS</title>
 <style>
 body{margin:0;font-family:Arial;background:#0f172a;color:#fff}
 .sidebar{width:240px;background:#020617;height:100vh;position:fixed;padding:20px}
-.sidebar h2{margin-bottom:30px}
 .sidebar button{display:block;width:100%;margin:8px 0;padding:12px;background:#111827;border:none;color:#fff;cursor:pointer;text-align:left}
 .main{margin-left:260px;padding:30px}
 .card{background:#020617;padding:20px;margin-bottom:20px;border-radius:10px}
-input,textarea{width:100%;padding:10px;margin-top:10px;background:#020617;border:1px solid #333;color:#fff}
-button.primary{background:#2563eb;padding:12px;border:none;margin-top:10px;cursor:pointer}
-#chatbox{height:250px;overflow:auto;background:#000;padding:10px;margin-top:10px}
-.restaurantBox{border:1px solid #333;padding:15px;margin-top:15px}
+textarea,input{width:100%;padding:10px;margin-top:10px;background:#000;border:1px solid #333;color:#fff}
+button.primary{background:#2563eb;padding:10px;border:none;margin-top:10px;cursor:pointer}
+.actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.danger{background:#dc2626;color:#fff;border:none;padding:10px;cursor:pointer}
+.secondary{background:#374151;color:#fff;border:none;padding:10px;cursor:pointer}
+.split{display:grid;grid-template-columns:280px 1fr;gap:16px}
+.list button{width:100%;text-align:left;margin:6px 0;padding:10px;background:#111827;border:1px solid #1f2937;color:#fff;cursor:pointer}
+.list button.active{border-color:#2563eb}
+#chat{height:220px;overflow:auto;background:#000;padding:10px;border:1px solid #333;margin-top:10px}
+#chat input{width:100%}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border:1px solid #333;padding:8px}
 </style>
-
 </head>
 
 <body>
 
 <div class="sidebar">
-<h2>AI Admin</h2>
-<button onclick="show('dashboard')">Dashboard</button>
-<button onclick="show('restaurants')">Restaurants + Agents</button>
+<h2>IVR SaaS</h2>
+<button onclick="show('global')">Global Prompt</button>
+<button onclick="show('restaurants')">Restaurants</button>
+<button onclick="show('logs')">Call Logs</button>
 </div>
 
 <div class="main">
 
-<!-- DASHBOARD -->
-
-<div id="dashboard" class="page">
-<div class="card"><h2>System Overview</h2>
-Active Restaurants: <b id="rCount">0</b><br>
+<div id="global" class="page">
+<div class="card">
+<h3>Global Prompt</h3>
+<textarea id="globalPrompt" style="height:150px"></textarea>
+<button class="primary" onclick="saveGlobal()">Save</button>
 </div>
 </div>
-
-<!-- RESTAURANTS -->
 
 <div id="restaurants" class="page" style="display:none">
-
 <div class="card">
-<h3>Add New Restaurant</h3>
-<input id="rname" placeholder="Restaurant name">
-<input id="rphone" placeholder="Phone">
-<textarea id="rprompt" placeholder="Agent prompt (Hebrew etc)"></textarea>
-<button class="primary" onclick="addRestaurant()">Create Restaurant</button>
+<h3>Add Restaurant</h3>
+<input id="rname" placeholder="Restaurant Name">
+<input id="rphone" placeholder="Phone (optional)">
+<textarea id="rprompt" placeholder="Restaurant Prompt"></textarea>
+<button class="primary" onclick="addRestaurant()">Create</button>
+</div>
+<div class="card split">
+<div class="list" id="rlist"></div>
+<div id="rdetail">
+<h3>Restaurant</h3>
+<div>Select a restaurant to manage prompts and chat.</div>
+</div>
+</div>
 </div>
 
+<div id="logs" class="page" style="display:none">
 <div class="card">
-<h3>All Restaurants & Agents</h3>
-<div id="rlist"></div>
+<h3>Call Logs</h3>
+<table class="table">
+<thead>
+<tr>
+<th>ID</th>
+<th>Restaurant</th>
+<th>Caller</th>
+<th>Status</th>
+<th>Duration</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody id="logTable"></tbody>
+</table>
 </div>
-
 </div>
 
 </div>
 
 <script>
-let DEFAULT_PROMPT="You are a restaurant AI call assistant. Speak Hebrew. Short replies.";
-let restaurants=[];
-let selectedRestaurant=null;
+const API_BASE = "http://localhost:5050";
+let restaurantsCache = []
+let selectedId = null
 
 function show(id){
 document.querySelectorAll(".page").forEach(p=>p.style.display="none")
 document.getElementById(id).style.display="block"
 }
 
-/* add restaurant */
-function addRestaurant(){
-let name=document.getElementById("rname").value
-let phone=document.getElementById("rphone").value
-let prompt=document.getElementById("rprompt").value || DEFAULT_PROMPT
-
-if(!name) return alert("Enter name")
-
-restaurants.push({
-name:name,
-phone:phone,
-prompt:prompt,
-active:true
-})
-
-renderRestaurants()
-updateStats()
+function esc(v){
+return String(v ?? "").replace(/[&<>"']/g, m => ({
+"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+}[m]))
 }
 
-/* render */
-function renderRestaurants(){
+async function loadGlobal(){
+let r=await fetch(`${API_BASE}/prompt/`)
+let d=await r.json()
+document.getElementById("globalPrompt").value=d.prompt
+}
+
+async function saveGlobal(){
+let txt=document.getElementById("globalPrompt").value
+await fetch(`${API_BASE}/prompt/save`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({content:txt})
+})
+alert("Saved")
+}
+
+async function loadRestaurants(){
+let r=await fetch(`${API_BASE}/restaurants/`)
+let data=await r.json()
+restaurantsCache = data
 let html=""
+data.forEach(r=>{
+html+=`<button class="${r.id===selectedId ? "active" : ""}" onclick="openRestaurant(${r.id})">${esc(r.name||"Unnamed")}</button>`
+})
+document.getElementById("rlist").innerHTML=html
+if(selectedId){
+openRestaurant(selectedId, true)
+}
+}
 
-restaurants.forEach((r,i)=>{
-html+=`
-<div class="restaurantBox">
+async function addRestaurant(){
+let name=document.getElementById("rname").value.trim()
+let phone=document.getElementById("rphone").value.trim()
+let prompt=document.getElementById("rprompt").value.trim()
+if(!name){alert("Name required");return}
+await fetch(`${API_BASE}/restaurants/add`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({name, phone, ivr_text: prompt})
+})
+document.getElementById("rname").value=""
+document.getElementById("rphone").value=""
+document.getElementById("rprompt").value=""
+loadRestaurants()
+}
 
-<b>${r.name}</b> (${r.phone})<br><br>
+async function updateRestaurant(id){
+let name=document.getElementById(`rname-${id}`).value.trim()
+let phone=document.getElementById(`rphone-${id}`).value.trim()
+let prompt=document.getElementById(`rprompt-${id}`).value
+await fetch(`${API_BASE}/restaurants/${id}`,{
+method:"PUT",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({name, phone, ivr_text: prompt})
+})
+alert("Updated")
+}
 
-<b>Agent Prompt:</b>
-<textarea id="prompt${i}">${r.prompt}</textarea>
+function openRestaurant(id, silent){
+selectedId = id
+let r = restaurantsCache.find(x=>x.id===id)
+if(!r){
+document.getElementById("rdetail").innerHTML = "<h3>Restaurant</h3><div>Not found.</div>"
+return
+}
+document.getElementById("rdetail").innerHTML = `
+<h3>${esc(r.name||"Unnamed")}</h3>
+<input id="rname-${r.id}" value="${esc(r.name||"")}" placeholder="Name">
+<input id="rphone-${r.id}" value="${esc(r.phone||"")}" placeholder="Phone">
+<textarea id="rprompt-${r.id}" placeholder="Restaurant Prompt">${esc(r.ivr_text||"")}</textarea>
+<div class="actions">
+<button class="primary" onclick="updateRestaurant(${r.id})">Save</button>
+<button class="secondary" onclick="toggleRestaurant(${r.id})">${r.active ? "Deactivate" : "Activate"}</button>
+<button class="danger" onclick="deleteRestaurant(${r.id})">Delete</button>
+</div>
 
-<button onclick="savePrompt(${i})">Save Prompt</button> <button onclick="selectRestaurant(${i})">Use This Agent</button> <button onclick="deleteRestaurant(${i})">Delete</button>
+<h3>Text Chat</h3>
+<div id="chat"></div>
+<input id="chatMsg" placeholder="Type message">
+<div class="actions">
+<button class="primary" onclick="sendChat()">Send</button>
+</div>
 
-<hr>
-
-<b>AI Chat Test</b>
-
-<div id="chat${i}" style="height:150px;overflow:auto;background:#000;padding:8px"></div>
-<input id="msg${i}" placeholder="type message">
-<button onclick="sendChat(${i})">Send</button>
-
-<br><br> <b>Voice Test</b><br> <button onclick="startVoice(${i})">Start Talking</button>
-
+<h3>Voice Chat</h3>
+<div class="actions">
+<button class="primary" onclick="startVoice()">Start Voice</button>
 </div>
 `
+if(!silent){
+loadRestaurants()
+}
+}
+
+async function toggleRestaurant(id){
+await fetch(`${API_BASE}/restaurants/toggle/${id}`,{method:"POST"})
+loadRestaurants()
+}
+
+async function deleteRestaurant(id){
+if(!confirm("Delete this restaurant?")) return
+await fetch(`${API_BASE}/restaurants/${id}`,{method:"DELETE"})
+selectedId = null
+loadRestaurants()
+document.getElementById("rdetail").innerHTML = "<h3>Restaurant</h3><div>Select a restaurant to manage prompts and chat.</div>"
+}
+
+async function loadLogs(){
+let r=await fetch(`${API_BASE}/calls/`)
+let logs=await r.json()
+let html=""
+logs.forEach(l=>{
+html+=`
+<tr>
+<td>${l.id}</td>
+<td>${l.restaurant}</td>
+<td>${l.caller}</td>
+<td>${l.status}</td>
+<td>${l.duration}</td>
+<td>${l.created}</td>
+</tr>`
 })
-
-document.getElementById("rlist").innerHTML=html
+document.getElementById("logTable").innerHTML=html
 }
 
-/* save prompt */
-function savePrompt(i){
-restaurants[i].prompt=document.getElementById("prompt"+i).value
-alert("Prompt updated")
-}
-
-/* select */
-function selectRestaurant(i){
-selectedRestaurant=restaurants[i]
-alert("Active agent: "+selectedRestaurant.name)
-}
-
-/* delete */
-function deleteRestaurant(i){
-restaurants.splice(i,1)
-renderRestaurants()
-updateStats()
-}
-
-/* stats */
-function updateStats(){
-document.getElementById("rCount").innerText=restaurants.length
-}
-
-/* CHAT */
-async function sendChat(i){
-let msg=document.getElementById("msg"+i).value
+async function sendChat(){
+if(!selectedId){alert("Select a restaurant");return}
+let msg=document.getElementById("chatMsg").value.trim()
 if(!msg) return
+let prompt=document.getElementById(`rprompt-${selectedId}`).value
+const chatEl = document.getElementById("chat")
+chatEl.innerHTML += `<div><b>You:</b> ${esc(msg)}</div>`
+document.getElementById("chatMsg").value=""
 
-let chatBox=document.getElementById("chat"+i)
-chatBox.innerHTML+="<b>You:</b> "+msg+"<br>"
-
-let r = await fetch("http://localhost:5050/chat",{
+let r = await fetch(`${API_BASE}/chat`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-message:msg,
-system_prompt:restaurants.prompt
+body:JSON.stringify({message:msg, restaurant_prompt: prompt})
 })
-})
-
 let data = await r.json()
-chatBox.innerHTML+="<b>AI:</b> "+data.reply+"<br><br>"
-chatBox.scrollTop=chatBox.scrollHeight
+chatEl.innerHTML += `<div><b>AI:</b> ${esc(data.reply||"")}</div><br>`
+chatEl.scrollTop = chatEl.scrollHeight
 }
 
-/* VOICE */
-async function startVoice(i){
+async function startVoice(){
+if(!selectedId){alert("Select a restaurant");return}
+let prompt=document.getElementById(`rprompt-${selectedId}`).value
 
-const tokenResponse = await fetch("http://localhost:5050/voice-session",{
+const tokenResponse = await fetch(`${API_BASE}/voice-session`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-system_prompt:restaurants.prompt
-})
+body:JSON.stringify({restaurant_prompt: prompt})
 });
-
 const session = await tokenResponse.json();
+if(!session.client_secret || !session.client_secret.value){
+alert("Voice session error")
+return
+}
 const EPHEMERAL_KEY = session.client_secret.value;
 
 const pc = new RTCPeerConnection();
-const audioEl = document.createElement("audio");
-audioEl.autoplay = true;
-pc.ontrack = e => audioEl.srcObject = e.streams[0];
+const audioEl=document.createElement("audio");audioEl.autoplay=true;
+pc.ontrack=e=>audioEl.srcObject=e.streams[0];
 
-const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-stream.getTracks().forEach(track => pc.addTrack(track, stream));
+const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+stream.getTracks().forEach(track=>pc.addTrack(track,stream));
 
-const dc = pc.createDataChannel("oai-events");
-
-const offer = await pc.createOffer();
+const offer=await pc.createOffer();
 await pc.setLocalDescription(offer);
 
-const baseUrl = "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
+const baseUrl="https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
 
-const sdpResponse = await fetch(baseUrl,{
+const sdpResponse=await fetch(baseUrl,{
 method:"POST",
-body: offer.sdp,
-headers:{
-Authorization:`Bearer ${EPHEMERAL_KEY}`,
-"Content-Type":"application/sdp"
-}
+body:offer.sdp,
+headers:{Authorization:`Bearer ${EPHEMERAL_KEY}`,"Content-Type":"application/sdp"}
 });
 
 const answer={type:"answer",sdp:await sdpResponse.text()}
 await pc.setRemoteDescription(answer);
 }
+
+loadGlobal()
+loadRestaurants()
+loadLogs()
 
 </script>
 </body>

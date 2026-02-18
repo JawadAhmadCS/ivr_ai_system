@@ -8,4 +8,18 @@ router = APIRouter(prefix="/calls")
 @router.get("/")
 def logs():
     db = SessionLocal()
-    return db.query(models.CallLog).all()
+    try:
+        rows = db.query(models.CallLog).order_by(models.CallLog.id.desc()).all()
+        return [
+            {
+                "id": l.id,
+                "restaurant": l.restaurant,
+                "caller": l.caller,
+                "duration": l.duration,
+                "status": l.status,
+                "created": l.created.isoformat() if l.created else None,
+            }
+            for l in rows
+        ]
+    finally:
+        db.close()
