@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AI Assistant</title>
+<style>
+body{font-family:arial;background:#111;color:#fff;padding:40px}
+#chat{height:400px;overflow:auto;border:1px solid #444;padding:10px;margin-bottom:10px}
+input{width:80%;padding:10px}
+button{padding:10px}
+</style>
+</head>
+
+<body>
+
+<h2>AI Assistant</h2>
+<div id="chat"></div>
+
+<input id="msg" placeholder="Type message"/>
+<button onclick="send()">Send</button>
+
+<script>
+async function send(){
+let msg = document.getElementById("msg").value
+if(!msg) return
+
+document.getElementById("chat").innerHTML += "<b>You:</b> "+msg+"<br>"
+
+let r = await fetch("http://localhost:5050/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:msg})
+})
+
+let data = await r.json()
+
+document.getElementById("chat").innerHTML += "<b>AI:</b> "+data.reply+"<br><br>"
+}
+</script>
+
+</body>
+</html>

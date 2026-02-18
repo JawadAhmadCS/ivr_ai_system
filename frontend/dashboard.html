@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Call Admin Dashboard</title>
+
+<style>
+body{
+margin:0;
+font-family:Arial;
+background:#0f172a;
+color:#fff;
+}
+
+.sidebar{
+width:240px;
+background:#020617;
+height:100vh;
+position:fixed;
+padding:20px;
+}
+
+.sidebar h2{margin-bottom:30px}
+.sidebar button{
+display:block;
+width:100%;
+margin:8px 0;
+padding:12px;
+background:#111827;
+border:none;
+color:#fff;
+cursor:pointer;
+text-align:left;
+}
+
+.main{
+margin-left:260px;
+padding:30px;
+}
+
+.card{
+background:#020617;
+padding:20px;
+margin-bottom:20px;
+border-radius:10px;
+}
+
+input,textarea,select{
+width:100%;
+padding:10px;
+margin-top:10px;
+background:#020617;
+border:1px solid #333;
+color:#fff;
+}
+
+button.primary{
+background:#2563eb;
+padding:12px;
+border:none;
+margin-top:10px;
+cursor:pointer;
+}
+
+#chatbox{
+height:260px;
+overflow:auto;
+background:#000;
+padding:10px;
+margin-bottom:10px;
+}
+
+.stat{
+font-size:26px;
+font-weight:bold;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="sidebar">
+<h2>AI Admin</h2>
+
+<button onclick="show('dashboard')">Dashboard</button> <button onclick="show('restaurants')">Restaurants</button> <button onclick="show('ivr')">IVR & Voice</button> <button onclick="show('calls')">Call Logs</button> <button onclick="show('ai')">AI Chat</button> <button onclick="show('voice')">Voice Test</button>
+
+</div>
+
+<div class="main">
+
+<!-- DASHBOARD -->
+
+<div id="dashboard" class="page">
+<div class="card"><div class="stat" id="rCount">0</div>Active Restaurants</div>
+<div class="card"><div class="stat" id="callCount">0</div>Total Calls Today</div>
+<div class="card"><div class="stat" id="missed">0</div>Missed Calls</div>
+<div class="card"><div class="stat" id="avg">0s</div>Avg Duration</div>
+<div class="card"><div class="stat" id="api">0</div>API Usage</div>
+<div class="card"><div class="stat" id="cost">$0</div>Usage Cost</div>
+</div>
+
+<!-- RESTAURANTS -->
+
+<div id="restaurants" class="page" style="display:none">
+<div class="card">
+<h3>Add Restaurant</h3>
+<input id="rname" placeholder="Restaurant name">
+<input id="rphone" placeholder="Phone">
+<textarea id="ivrtext" placeholder="IVR Hebrew text"></textarea>
+<button class="primary" onclick="addRestaurant()">Add</button>
+</div>
+
+<div class="card">
+<h3>Restaurant List</h3>
+<div id="rlist"></div>
+</div>
+</div>
+
+<!-- IVR -->
+
+<div id="ivr" class="page" style="display:none">
+<div class="card">
+<h3>IVR Flow Config</h3>
+<textarea placeholder="Edit Hebrew voice flow"></textarea>
+<button class="primary">Save Flow</button>
+<button class="primary">Live Call Test</button>
+</div>
+</div>
+
+<!-- CALL LOGS -->
+
+<div id="calls" class="page" style="display:none">
+<div class="card">
+<h3>Call Logs</h3>
+<div id="calllogs">No logs yet</div>
+</div>
+</div>
+
+<!-- AI CHAT -->
+
+<div id="ai" class="page" style="display:none">
+<div class="card">
+<h3>AI Chat Test</h3>
+
+<div id="chatbox"></div>
+<input id="msg" placeholder="Type message">
+<button class="primary" onclick="sendChat()">Send</button>
+</div>
+</div>
+
+<!-- VOICE -->
+
+<div id="voice" class="page" style="display:none">
+<div class="card">
+<h3>Realtime Voice Test</h3>
+<button class="primary" onclick="startVoice()">Start Talking</button>
+</div>
+</div>
+
+</div>
+
+<script>
+let restaurants=[];
+
+function show(id){
+document.querySelectorAll(".page").forEach(p=>p.style.display="none")
+document.getElementById(id).style.display="block"
+}
+
+/* dummy stats */
+setInterval(()=>{
+document.getElementById("rCount").innerText = restaurants.length
+document.getElementById("callCount").innerText = Math.floor(Math.random()*20)
+document.getElementById("missed").innerText = Math.floor(Math.random()*5)
+document.getElementById("avg").innerText = Math.floor(Math.random()*60)+"s"
+document.getElementById("api").innerText = Math.floor(Math.random()*200)
+document.getElementById("cost").innerText = "$"+Math.floor(Math.random()*10)
+},2000)
+
+/* restaurant add */
+function addRestaurant(){
+let n=document.getElementById("rname").value
+let p=document.getElementById("rphone").value
+let t=document.getElementById("ivrtext").value
+
+if(!n) return alert("enter name")
+
+restaurants.push({name:n,phone:p,ivr:t,active:true})
+renderRestaurants()
+}
+
+function renderRestaurants(){
+let html=""
+restaurants.forEach((r,i)=>{
+html+=`
+<div style="padding:10px;border-bottom:1px solid #333">
+<b>${r.name}</b> (${r.phone})
+<button onclick="toggle(${i})">ON/OFF</button>
+<button onclick="delR(${i})">Delete</button>
+</div>`
+})
+document.getElementById("rlist").innerHTML=html
+}
+
+function toggle(i){
+restaurants[i].active=!restaurants[i].active
+renderRestaurants()
+}
+
+function delR(i){
+restaurants.splice(i,1)
+renderRestaurants()
+}
+
+/* AI CHAT */
+async function sendChat(){
+let msg=document.getElementById("msg").value
+if(!msg) return
+
+chatbox.innerHTML += "<b>You:</b> "+msg+"<br>"
+
+let r = await fetch("http://localhost:5050/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:msg})
+})
+
+let data = await r.json()
+chatbox.innerHTML += "<b>AI:</b> "+data.reply+"<br><br>"
+}
+
+/* VOICE */
+async function startVoice(){
+const tokenResponse = await fetch("http://localhost:5050/voice-session");
+const session = await tokenResponse.json();
+const EPHEMERAL_KEY = session.client_secret.value;
+
+const pc = new RTCPeerConnection();
+const audioEl = document.createElement("audio");
+audioEl.autoplay = true;
+pc.ontrack = e => audioEl.srcObject = e.streams[0];
+
+const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+const dc = pc.createDataChannel("oai-events");
+
+const offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+
+const baseUrl = "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
+
+const sdpResponse = await fetch(baseUrl,{
+method:"POST",
+body: offer.sdp,
+headers:{
+Authorization:`Bearer ${EPHEMERAL_KEY}`,
+"Content-Type":"application/sdp"
+}
+});
+
+const answer={type:"answer",sdp:await sdpResponse.text()}
+await pc.setRemoteDescription(answer);
+}
+</script>
+
+</body>
+</html>

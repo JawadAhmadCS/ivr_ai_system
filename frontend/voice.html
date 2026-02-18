@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Voice AI</title>
+<style>
+body{background:#111;color:#fff;font-family:arial;padding:40px}
+button{padding:15px;font-size:18px}
+</style>
+</head>
+<body>
+
+<h2>Realtime Voice AI</h2>
+<button onclick="start()">Start Talking</button>
+
+<script>
+let pc;
+let dc;
+
+async function start(){
+
+const tokenResponse = await fetch("http://localhost:5050/voice-session");
+const session = await tokenResponse.json();
+
+const EPHEMERAL_KEY = session.client_secret.value;
+
+pc = new RTCPeerConnection();
+
+const audioEl = document.createElement("audio");
+audioEl.autoplay = true;
+pc.ontrack = e => audioEl.srcObject = e.streams[0];
+
+const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+dc = pc.createDataChannel("oai-events");
+dc.onmessage = e => console.log("AI:", e.data);
+
+const offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+
+const baseUrl = "https://api.openai.com/v1/realtime";
+const model = "gpt-4o-realtime-preview";
+
+const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+method:"POST",
+body: offer.sdp,
+headers:{
+Authorization: `Bearer ${EPHEMERAL_KEY}`,
+"Content-Type":"application/sdp"
+},
+});
+
+const answer = {
+type:"answer",
+sdp: await sdpResponse.text()
+};
+
+await pc.setRemoteDescription(answer);
+}
+</script>
+
+</body>
+</html>
