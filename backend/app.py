@@ -125,7 +125,7 @@ async def handle_incoming_call(request: Request, restaurant_id: int | None = Non
     host = request.url.hostname
     connect = Connect()
     if restaurant_id is not None:
-        connect.stream(url=f"wss://{host}/media-stream?restaurant_id={restaurant_id}")
+        connect.stream(url=f"wss://{host}/media-stream/{restaurant_id}")
     else:
         connect.stream(url=f"wss://{host}/media-stream")
     response.append(connect)
@@ -189,12 +189,9 @@ def create_voice_session(data: dict):
         print(e)
         raise HTTPException(status_code=500, detail="session error")
 
-@app.websocket("/media-stream")
-async def handle_media_stream(websocket: WebSocket):
+async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int | None):
     """Handle WebSocket connections between Twilio and OpenAI."""
     print("Client connected")
-    q_id = websocket.query_params.get("restaurant_id")
-    restaurant_id = int(q_id) if q_id and q_id.isdigit() else None
     instructions = get_restaurant_prompt(restaurant_id)
     await websocket.accept()
 
@@ -319,6 +316,16 @@ async def handle_media_stream(websocket: WebSocket):
                 mark_queue.append('responsePart')
 
         await asyncio.gather(receive_from_twilio(), send_to_twilio())
+
+@app.websocket("/media-stream")
+async def handle_media_stream(websocket: WebSocket):
+    q_id = websocket.query_params.get("restaurant_id")
+    restaurant_id = int(q_id) if q_id and q_id.isdigit() else None
+    await handle_media_stream_with_id(websocket, restaurant_id)
+
+@app.websocket("/media-stream/{restaurant_id}")
+async def handle_media_stream_restaurant(websocket: WebSocket, restaurant_id: int):
+    await handle_media_stream_with_id(websocket, restaurant_id)
 
 async def send_initial_conversation_item(openai_ws):
     """Send initial conversation item if AI talks first."""
