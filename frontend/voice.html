@@ -150,13 +150,20 @@ let rid=ridSelect.value
 
 chat.innerHTML+="<b>You:</b>"+msg+"<br>"
 
+try{
 let r=await fetch(`${API_BASE}/chat`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({message:msg,restaurant_id:rid})
 })
 let d=await r.json()
+if(!r.ok || !d.reply){
+throw new Error(d?.detail || "chat failed")
+}
 chat.innerHTML+="<b>AI:</b>"+d.reply+"<br><br>"
+}catch(e){
+chat.innerHTML+="<b>AI:</b> Server error, we will fix soon.<br><br>"
+}
 }
 
 async function startVoice(){

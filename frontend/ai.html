@@ -27,6 +27,7 @@ if(!msg) return
 
 document.getElementById("chat").innerHTML += "<b>You:</b> "+msg+"<br>"
 
+try{
 let r = await fetch(`${API_BASE}/chat`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
@@ -34,8 +35,14 @@ body:JSON.stringify({message:msg})
 })
 
 let data = await r.json()
+if(!r.ok || !data.reply){
+throw new Error(data?.detail || "chat failed")
+}
 
 document.getElementById("chat").innerHTML += "<b>AI:</b> "+data.reply+"<br><br>"
+}catch(e){
+document.getElementById("chat").innerHTML += "<b>AI:</b> Server error, we will fix soon.<br><br>"
+}
 }
 </script>
 

@@ -23,6 +23,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 TEMPERATURE = float(os.getenv('TEMPERATURE', 0.3))
+REALTIME_MODEL = os.getenv('REALTIME_MODEL', 'gpt-realtime')
 # "Always respond in Hebrew & instantly. "
 BASE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = BASE_DIR / "prompts"
@@ -69,6 +70,52 @@ app.include_router(prompt.router)
 
 if not OPENAI_API_KEY:
     raise ValueError('Missing the OpenAI API key. Please set it in the .env file.')
+
+
+def log_openai_status(context: str, working: bool, detail: str = ""):
+    status = "WORKING" if working else "NOT WORKING"
+    suffix = f" | {detail}" if detail else ""
+    print(f"[OPENAI][{context}] {status}{suffix}")
+
+
+def extract_openai_error(body, fallback_text: str = "") -> str:
+    if isinstance(body, dict):
+        error_obj = body.get("error")
+        if isinstance(error_obj, dict):
+            msg = error_obj.get("message")
+            if msg:
+                return str(msg)
+    return fallback_text[:300] if fallback_text else "Unknown OpenAI error"
+
+
+def check_openai_connectivity():
+    url = "https://api.openai.com/v1/models/gpt-4o-mini"
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    try:
+        r = requests.get(url, headers=headers, timeout=15)
+        try:
+            body = r.json()
+        except ValueError:
+            body = None
+
+        if r.status_code >= 400:
+            return False, f"HTTP {r.status_code}: {extract_openai_error(body, r.text)}"
+        return True, "API reachable"
+    except Exception as e:
+        return False, str(e)
+
+
+@app.on_event("startup")
+async def startup_openai_check():
+    ok, detail = check_openai_connectivity()
+    log_openai_status("startup", ok, detail)
+
+
+@app.get("/health/openai", response_class=JSONResponse)
+async def health_openai():
+    ok, detail = check_openai_connectivity()
+    log_openai_status("health", ok, detail)
+    return {"working": ok, "detail": detail}
 
 @app.get("/", response_class=JSONResponse)
 async def index_page():
@@ -170,6 +217,7 @@ async def chat_with_ai(data: dict):
             error_message = body.get("error", {}).get("message", "")
         if not error_message:
             error_message = r.text[:300]
+        log_openai_status("chat", False, f"HTTP {r.status_code}: {error_message}")
         raise HTTPException(
             status_code=502,
             detail=f"OpenAI API error ({r.status_code}): {error_message}"
@@ -184,6 +232,7 @@ async def chat_with_ai(data: dict):
     if not isinstance(reply, str):
         reply = str(reply)
 
+    log_openai_status("chat", True, "reply generated")
     return {"reply": reply}
 
 @app.post("/voice-session")
@@ -201,15 +250,37 @@ def create_voice_session(data: dict):
         }
 
         payload = {
-            "model": "gpt-4o-realtime-preview",
+            "model": REALTIME_MODEL,
             "voice": "alloy",
             "instructions": final_prompt
         }
 
         r = requests.post(url, headers=headers, json=payload)
-        return r.json()
+        try:
+            body = r.json()
+        except ValueError:
+            log_openai_status("voice-session", False, "Invalid JSON from OpenAI realtime")
+            raise HTTPException(status_code=502, detail="Invalid response from OpenAI realtime API")
+
+        if r.status_code >= 400:
+            error_message = extract_openai_error(body, r.text)
+            log_openai_status("voice-session", False, f"HTTP {r.status_code}: {error_message}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"OpenAI realtime error ({r.status_code}): {error_message}"
+            )
+
+        if not isinstance(body, dict) or not body.get("client_secret", {}).get("value"):
+            log_openai_status("voice-session", False, "Missing client_secret in realtime response")
+            raise HTTPException(status_code=502, detail="OpenAI realtime response missing client_secret")
+
+        body["model"] = REALTIME_MODEL
+        log_openai_status("voice-session", True, "session token issued")
+        return body
 
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         print(e)
         raise HTTPException(status_code=500, detail="session error")
 
@@ -220,7 +291,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
     await websocket.accept()
 
     async with websockets.connect(
-        f"wss://api.openai.com/v1/realtime?model=gpt-realtime&temperature={TEMPERATURE}",
+        f"wss://api.openai.com/v1/realtime?model={REALTIME_MODEL}&temperature={TEMPERATURE}",
         additional_headers={
             "Authorization": f"Bearer {OPENAI_API_KEY}"
         }
@@ -376,7 +447,7 @@ async def initialize_session(openai_ws, instructions: str):
         "type": "session.update",
         "session": {
             "type": "realtime",
-            "model": "gpt-realtime",
+            "model": REALTIME_MODEL,
             "output_modalities": ["audio"],
             "audio": {
                 "input": {

@@ -1354,9 +1354,12 @@ async function sendChat() {
       body: JSON.stringify({ message: msg, restaurant_prompt: prompt })
     });
     const data = await r.json();
-    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble">${esc(data.reply || '')}</div></div>`;
+    if (!r.ok || !data.reply) {
+      throw new Error(data?.detail || 'chat failed');
+    }
+    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble">${esc(data.reply)}</div></div>`;
   } catch(e) {
-    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble" style="color:var(--red)">Connection error</div></div>`;
+    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble" style="color:var(--red)">Server error, we will fix soon.</div></div>`;
   }
   chatEl.scrollTop = chatEl.scrollHeight;
 }
