@@ -897,7 +897,7 @@
     </div>
   </div>
 
-  <!-- Restaurants -->
+    <!-- Restaurants -->
   <div id="restaurants" class="page">
     <div class="page-header">
       <div class="page-title">Restaurants</div>
@@ -916,16 +916,43 @@
         </div>
         <div class="r-list-inner" id="rlist">
           <div class="empty-state" style="padding:30px 16px">
-            <div class="empty-icon" style="font-size:28px">🍽️</div>
             <p style="font-size:12px">No restaurants yet</p>
           </div>
         </div>
       </div>
 
-      <div id="rdetail">
-        <div class="card" style="text-align:center; padding:60px 20px">
-          <div style="font-size:42px; margin-bottom:12px; opacity:0.3">👆</div>
-          <div style="color:var(--muted); font-size:14px">Select a restaurant to manage it</div>
+      <div id="rightPane">
+        <div id="createBox" class="card" style="display:none">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Create Restaurant
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Restaurant Name</label>
+              <input id="rname" placeholder="e.g. Bella Italia">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone Number</label>
+              <input id="rphone" placeholder="+1 (555) 000-0000">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">IVR Prompt</label>
+            <textarea id="rprompt" placeholder="Describe this restaurant's personality, menu highlights, hours, and special instructions..."></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" onclick="addRestaurant()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create Restaurant
+            </button>
+          </div>
+        </div>
+
+        <div id="rdetail">
+          <div class="card" style="text-align:center; padding:60px 20px">
+            <div style="color:var(--muted); font-size:14px">Select a restaurant to manage it</div>
+          </div>
         </div>
       </div>
     </div>
