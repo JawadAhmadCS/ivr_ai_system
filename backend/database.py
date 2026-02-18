@@ -1,10 +1,10 @@
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from config import DB_NAME, DB_USER, DB_PASS, DB_HOST, DB_PORT, DATABASE_URL
+from config import DB_NAME, ROOT_DATABASE_URL, DATABASE_URL
 
 root_engine = create_engine(
-    f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}",
+    ROOT_DATABASE_URL,
     isolation_level="AUTOCOMMIT"
 )
 
