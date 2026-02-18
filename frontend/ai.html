@@ -19,13 +19,15 @@ button{padding:10px}
 <button onclick="send()">Send</button>
 
 <script>
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+
 async function send(){
 let msg = document.getElementById("msg").value
 if(!msg) return
 
 document.getElementById("chat").innerHTML += "<b>You:</b> "+msg+"<br>"
 
-let r = await fetch("http://localhost:5050/chat",{
+let r = await fetch(`${API_BASE}/chat`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({message:msg})

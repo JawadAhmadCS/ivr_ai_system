@@ -1,6 +1,8 @@
 
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+
 async function loadStats(){
-let r = await fetch("http://localhost:8000/dashboard/stats")
+let r = await fetch(`${API_BASE}/dashboard/stats`)
 let data = await r.json()
 
 document.getElementById("stats").innerHTML = `

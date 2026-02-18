@@ -85,13 +85,15 @@ button.primary{background:#2563eb;padding:12px;border:0;margin-top:10px;color:#f
 </div>
 
 <script>
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:5050`;
+
 function show(id){
 document.querySelectorAll(".page").forEach(p=>p.style.display="none")
 document.getElementById(id).style.display="block"
 }
 
 async function load(){
-let r = await fetch("http://localhost:5050/restaurants")
+let r = await fetch(`${API_BASE}/restaurants`)
 let data = await r.json()
 
 defaultPrompt.value = data.default_prompt
@@ -118,7 +120,7 @@ list.innerHTML=html
 
 async function createR(){
 let prompt=newPrompt.value
-await fetch("http://localhost:5050/restaurant/create",{
+await fetch(`${API_BASE}/restaurant/create`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({prompt})
@@ -127,7 +129,7 @@ load()
 }
 
 async function updatePrompt(id,prompt){
-await fetch("http://localhost:5050/restaurant/update",{
+await fetch(`${API_BASE}/restaurant/update`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({id,prompt})
@@ -135,7 +137,7 @@ body:JSON.stringify({id,prompt})
 }
 
 async function updateDefault(){
-await fetch("http://localhost:5050/default/update",{
+await fetch(`${API_BASE}/default/update`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({prompt:defaultPrompt.value})
@@ -148,7 +150,7 @@ let rid=ridSelect.value
 
 chat.innerHTML+="<b>You:</b>"+msg+"<br>"
 
-let r=await fetch("http://localhost:5050/chat",{
+let r=await fetch(`${API_BASE}/chat`,{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({message:msg,restaurant_id:rid})
@@ -160,7 +162,7 @@ chat.innerHTML+="<b>AI:</b>"+d.reply+"<br><br>"
 async function startVoice(){
 let rid=voiceRid.value
 
-const tokenResponse = await fetch(`http://localhost:5050/voice-session?restaurant_id=${rid}`);
+const tokenResponse = await fetch(`${API_BASE}/voice-session?restaurant_id=${rid}`);
 const session = await tokenResponse.json();
 const EPHEMERAL_KEY = session.client_secret.value;
 
