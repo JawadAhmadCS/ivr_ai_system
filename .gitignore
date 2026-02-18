@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.log
+.env
+.venv/
+venv/
+env/
+.vscode/
+.idea/
+.DS_Store
+
+# Database files
+*.sqlite3
+*.db
+
+# Frontend build/artifacts (if added later)
+dist/
+build/
+node_modules/
