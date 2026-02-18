@@ -1,287 +1,1324 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Restaurant SaaS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceIQ — Restaurant IVR Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-body{margin:0;font-family:Arial;background:#0f172a;color:#fff}
-.sidebar{width:240px;background:#020617;height:100vh;position:fixed;padding:20px}
-.sidebar button{display:block;width:100%;margin:8px 0;padding:12px;background:#111827;border:none;color:#fff;cursor:pointer;text-align:left}
-.main{margin-left:260px;padding:30px}
-.card{background:#020617;padding:20px;margin-bottom:20px;border-radius:10px}
-textarea,input{width:100%;padding:10px;margin-top:10px;background:#000;border:1px solid #333;color:#fff}
-button.primary{background:#2563eb;padding:10px;border:none;margin-top:10px;cursor:pointer}
-.actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
-.danger{background:#dc2626;color:#fff;border:none;padding:10px;cursor:pointer}
-.secondary{background:#374151;color:#fff;border:none;padding:10px;cursor:pointer}
-.split{display:grid;grid-template-columns:280px 1fr;gap:16px}
-.list button{width:100%;text-align:left;margin:6px 0;padding:10px;background:#111827;border:1px solid #1f2937;color:#fff;cursor:pointer}
-.list button.active{border-color:#2563eb}
-#chat{height:220px;overflow:auto;background:#000;padding:10px;border:1px solid #333;margin-top:10px}
-#chat input{width:100%}
-.table{width:100%;border-collapse:collapse}
-.table th,.table td{border:1px solid #333;padding:8px}
+  :root {
+    --bg: #080c14;
+    --surface: #0d1220;
+    --surface2: #111827;
+    --border: #1e2d45;
+    --accent: #0ea5e9;
+    --accent2: #38bdf8;
+    --accent-glow: rgba(14,165,233,0.15);
+    --green: #10b981;
+    --red: #f43f5e;
+    --amber: #f59e0b;
+    --text: #f0f6ff;
+    --muted: #64748b;
+    --subtle: #1e293b;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background mesh */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(14,165,233,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(56,189,248,0.05) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+  }
+
+  .logo {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), #0284c7);
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 0 20px rgba(14,165,233,0.3);
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .nav {
+    padding: 16px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .nav-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 12px 8px 6px;
+  }
+
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    transition: all 0.18s;
+    text-align: left;
+  }
+
+  .nav-btn:hover {
+    background: var(--subtle);
+    color: var(--text);
+  }
+
+  .nav-btn.active {
+    background: var(--accent-glow);
+    color: var(--accent2);
+    border: 1px solid rgba(14,165,233,0.25);
+  }
+
+  .nav-btn .icon {
+    width: 18px; height: 18px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .nav-btn.active .icon { opacity: 1; }
+
+  .sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--green);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Main */
+  .main {
+    margin-left: 220px;
+    padding: 32px;
+    min-height: 100vh;
+    position: relative;
+    z-index: 1;
+  }
+
+  .page { display: none; animation: fadeIn 0.25s ease; }
+  .page.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Page header */
+  .page-header {
+    margin-bottom: 28px;
+  }
+
+  .page-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  .page-subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: #2a3f5f; }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title svg { color: var(--accent); }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+
+  .stat-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(14,165,233,0.1);
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-icon {
+    position: absolute;
+    top: 18px; right: 18px;
+    width: 34px; height: 34px;
+    background: var(--accent-glow);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    border: 1px solid rgba(14,165,233,0.15);
+  }
+
+  /* Form elements */
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+  }
+
+  input, textarea, select {
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+
+  textarea {
+    resize: vertical;
+    min-height: 110px;
+    line-height: 1.6;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(14,165,233,0.25);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent2);
+    box-shadow: 0 0 28px rgba(14,165,233,0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background: var(--subtle);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    background: var(--surface2);
+    border-color: #2a3f5f;
+  }
+
+  .btn-danger {
+    background: rgba(244,63,94,0.12);
+    color: var(--red);
+    border: 1px solid rgba(244,63,94,0.25);
+  }
+
+  .btn-danger:hover {
+    background: rgba(244,63,94,0.22);
+    border-color: var(--red);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+  }
+
+  .btn-ghost:hover {
+    background: var(--subtle);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .btn-sm { padding: 7px 13px; font-size: 13px; }
+
+  .btn-success {
+    background: rgba(16,185,129,0.12);
+    color: var(--green);
+    border: 1px solid rgba(16,185,129,0.25);
+  }
+
+  .btn-success:hover {
+    background: rgba(16,185,129,0.2);
+  }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* Split layout */
+  .split-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* Restaurant list */
+  .restaurant-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .r-list-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .r-list-inner { padding: 8px; max-height: 560px; overflow-y: auto; }
+
+  .r-list-inner::-webkit-scrollbar { width: 4px; }
+  .r-list-inner::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .r-item {
+    width: 100%;
+    padding: 11px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    text-align: left;
+    transition: all 0.15s;
+    margin-bottom: 2px;
+  }
+
+  .r-item:hover {
+    background: var(--subtle);
+    color: var(--text);
+  }
+
+  .r-item.active {
+    background: var(--accent-glow);
+    border-color: rgba(14,165,233,0.3);
+    color: var(--accent2);
+  }
+
+  .r-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .r-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .r-dot.off { background: var(--muted); }
+
+  .r-item-name { flex: 1; font-weight: 500; }
+
+  /* Chat */
+  .chat-box {
+    height: 200px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chat-box::-webkit-scrollbar { width: 4px; }
+  .chat-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .chat-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chat-msg .sender {
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  .chat-msg.user .sender { color: var(--accent); }
+  .chat-msg.ai .sender { color: var(--green); }
+
+  .chat-msg .bubble {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 90%;
+  }
+
+  .chat-msg.user .bubble {
+    background: var(--accent-glow);
+    border: 1px solid rgba(14,165,233,0.2);
+    color: var(--text);
+    align-self: flex-end;
+  }
+
+  .chat-msg.ai .bubble {
+    background: var(--subtle);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .chat-input-row input {
+    flex: 1;
+  }
+
+  /* Table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 400;
+  }
+
+  .data-table td {
+    padding: 13px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    color: #c4d4e8;
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+  .data-table tbody tr:last-child td { border-bottom: none; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+
+  .badge-green { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+  .badge-red { background: rgba(244,63,94,0.12); color: var(--red); border: 1px solid rgba(244,63,94,0.2); }
+  .badge-amber { background: rgba(245,158,11,0.12); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+  .badge-blue { background: var(--accent-glow); color: var(--accent2); border: 1px solid rgba(14,165,233,0.2); }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+
+  .empty-state .empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  .empty-state p { font-size: 14px; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 18px;
+    font-size: 13px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: none;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #toast.success { border-color: rgba(16,185,129,0.4); }
+  #toast.success .toast-dot { background: var(--green); }
+  #toast.error { border-color: rgba(244,63,94,0.4); }
+  #toast.error .toast-dot { background: var(--red); }
+
+  .toast-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Voice button */
+  .voice-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 24px;
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: var(--radius);
+    color: var(--green);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .voice-btn:hover {
+    background: rgba(16,185,129,0.18);
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(16,185,129,0.15);
+  }
+
+  .voice-btn.active {
+    background: rgba(244,63,94,0.1);
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+  }
+
+  /* Section title */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Loading */
+  .loading {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(14,165,233,0.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 20px;
+    width: fit-content;
+    border: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* Add form row */
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
 </style>
 </head>
-
 <body>
 
-<div class="sidebar">
-<h2>IVR SaaS</h2>
-<button onclick="show('global')">Global Prompt</button>
-<button onclick="show('restaurants')">Restaurants</button>
-<button onclick="show('logs')">Call Logs</button>
-</div>
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">🎙️</div>
+    <div class="logo-text">Voice<span>IQ</span></div>
+  </div>
 
-<div class="main">
+  <div class="nav">
+    <div class="nav-label">Platform</div>
+    <button class="nav-btn active" onclick="show('dash')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-btn" onclick="show('global')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Global Prompt
+    </button>
+    <button class="nav-btn" onclick="show('restaurants')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
+      Restaurants
+    </button>
+    <button class="nav-btn" onclick="show('logs')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Call Logs
+    </button>
+  </div>
 
-<div id="global" class="page">
-<div class="card">
-<h3>Global Prompt</h3>
-<textarea id="globalPrompt" style="height:150px"></textarea>
-<button class="primary" onclick="saveGlobal()">Save</button>
-</div>
-</div>
+  <div class="sidebar-footer">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      System Online
+    </div>
+  </div>
+</nav>
 
-<div id="restaurants" class="page" style="display:none">
-<div class="card">
-<h3>Add Restaurant</h3>
-<input id="rname" placeholder="Restaurant Name">
-<input id="rphone" placeholder="Phone (optional)">
-<textarea id="rprompt" placeholder="Restaurant Prompt"></textarea>
-<button class="primary" onclick="addRestaurant()">Create</button>
-</div>
-<div class="card split">
-<div class="list" id="rlist"></div>
-<div id="rdetail">
-<h3>Restaurant</h3>
-<div>Select a restaurant to manage prompts and chat.</div>
-</div>
-</div>
-</div>
+<!-- Main content -->
+<main class="main">
 
-<div id="logs" class="page" style="display:none">
-<div class="card">
-<h3>Call Logs</h3>
-<table class="table">
-<thead>
-<tr>
-<th>ID</th>
-<th>Restaurant</th>
-<th>Caller</th>
-<th>Status</th>
-<th>Duration</th>
-<th>Date</th>
-</tr>
-</thead>
-<tbody id="logTable"></tbody>
-</table>
-</div>
-</div>
+  <!-- Dashboard -->
+  <div id="dash" class="page active">
+    <div class="page-header">
+      <div class="page-title">Dashboard</div>
+      <div class="page-subtitle">Platform performance overview</div>
+    </div>
 
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Active Restaurants</div>
+        <div class="stat-value" id="s-restaurants">—</div>
+        <div class="stat-icon">🍽️</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Calls</div>
+        <div class="stat-value" id="s-calls">—</div>
+        <div class="stat-icon">📞</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Missed Calls</div>
+        <div class="stat-value" id="s-missed">—</div>
+        <div class="stat-icon">📵</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Duration</div>
+        <div class="stat-value" id="s-duration">—</div>
+        <div class="stat-icon">⏱️</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">API Usage</div>
+        <div class="stat-value" id="s-usage">0</div>
+        <div class="stat-icon">🔌</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Usage Cost</div>
+        <div class="stat-value" id="s-cost">$0.00</div>
+        <div class="stat-icon">💳</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Recent Activity
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Restaurant</th>
+            <th>Caller</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="recentLogs">
+          <tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📋</div><p>No recent calls</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Global Prompt -->
+  <div id="global" class="page">
+    <div class="page-header">
+      <div class="page-title">Global Prompt</div>
+      <div class="page-subtitle">This prompt is injected into every restaurant's AI context</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        Base System Prompt
+      </div>
+      <div class="form-group">
+        <label class="form-label">Prompt Content</label>
+        <textarea id="globalPrompt" style="min-height:180px" placeholder="You are a helpful restaurant assistant. When customers call, greet them warmly and assist with reservations, menu questions, and general inquiries..."></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="saveGlobal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Changes
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Tips
+      </div>
+      <p style="font-size:13px; color:var(--muted); line-height:1.7">
+        The global prompt sets the baseline behavior for all restaurants. Each restaurant's individual prompt is appended after this, allowing per-restaurant customization. Keep this concise and focused on universal behaviors like tone, language, and response format.
+      </p>
+    </div>
+  </div>
+
+  <!-- Restaurants -->
+  <div id="restaurants" class="page">
+    <div class="page-header">
+      <div class="page-title">Restaurants</div>
+      <div class="page-subtitle">Manage connected restaurant profiles</div>
+    </div>
+
+    <div class="split-layout">
+      <div class="restaurant-list">
+        <div class="r-list-header">
+          <span>Restaurants</span>
+          <button class="btn btn-ghost" title="Create new restaurant" onclick="toggleCreate()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="r-list-inner" id="rlist">
+          <div class="empty-state" style="padding:30px 16px">
+            <div class="empty-icon" style="font-size:28px">🍽️</div>
+            <p style="font-size:12px">No restaurants yet</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="rdetail">
+        <div class="card" style="text-align:center; padding:60px 20px">
+          <div style="font-size:42px; margin-bottom:12px; opacity:0.3">👆</div>
+          <div style="color:var(--muted); font-size:14px">Select a restaurant to manage it</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Call Logs -->
+  <div id="logs" class="page">
+    <div class="page-header">
+      <div class="page-title">Call Logs</div>
+      <div class="page-subtitle">Full history of all IVR interactions</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        All Calls
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Restaurant</th>
+            <th>Caller</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="logTable">
+          <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📵</div><p>No calls recorded yet</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast -->
+<div id="toast">
+  <div class="toast-dot"></div>
+  <span id="toastMsg"></span>
 </div>
 
 <script>
 const API_BASE = "http://localhost:5050";
-let restaurantsCache = []
-let selectedId = null
+let restaurantsCache = [];
+let selectedId = null;
 
-function show(id){
-document.querySelectorAll(".page").forEach(p=>p.style.display="none")
-document.getElementById(id).style.display="block"
+// Navigation
+function show(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  if (id === 'logs') loadLogs();
+  if (id === 'restaurants') loadRestaurants();
 }
 
-function esc(v){
-return String(v ?? "").replace(/[&<>"']/g, m => ({
-"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
-}[m]))
+// Toast
+let toastTimer;
+function toast(msg, type = 'success') {
+  clearTimeout(toastTimer);
+  const el = document.getElementById('toast');
+  const msgEl = document.getElementById('toastMsg');
+  el.className = `show ${type}`;
+  msgEl.textContent = msg;
+  toastTimer = setTimeout(() => { el.className = ''; }, 3000);
 }
 
-async function loadGlobal(){
-let r=await fetch(`${API_BASE}/prompt/`)
-let d=await r.json()
-document.getElementById("globalPrompt").value=d.prompt
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
 }
 
-async function saveGlobal(){
-let txt=document.getElementById("globalPrompt").value
-await fetch(`${API_BASE}/prompt/save`,{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({content:txt})
-})
-alert("Saved")
+function toggleCreate() {
+  const box = document.getElementById('createBox');
+  if (!box) return;
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
 }
 
-async function loadRestaurants(){
-let r=await fetch(`${API_BASE}/restaurants/`)
-let data=await r.json()
-restaurantsCache = data
-let html=""
-data.forEach(r=>{
-html+=`<button class="${r.id===selectedId ? "active" : ""}" onclick="openRestaurant(${r.id})">${esc(r.name||"Unnamed")}</button>`
-})
-document.getElementById("rlist").innerHTML=html
-if(selectedId){
-openRestaurant(selectedId, true)
-}
+// Global Prompt
+async function loadGlobal() {
+  try {
+    const r = await fetch(`${API_BASE}/prompt/`);
+    const d = await r.json();
+    document.getElementById('globalPrompt').value = d.prompt || '';
+  } catch(e) {}
 }
 
-async function addRestaurant(){
-let name=document.getElementById("rname").value.trim()
-let phone=document.getElementById("rphone").value.trim()
-let prompt=document.getElementById("rprompt").value.trim()
-if(!name){alert("Name required");return}
-await fetch(`${API_BASE}/restaurants/add`,{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({name, phone, ivr_text: prompt})
-})
-document.getElementById("rname").value=""
-document.getElementById("rphone").value=""
-document.getElementById("rprompt").value=""
-loadRestaurants()
+async function saveGlobal() {
+  const txt = document.getElementById('globalPrompt').value;
+  try {
+    await fetch(`${API_BASE}/prompt/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: txt })
+    });
+    toast('Global prompt saved successfully');
+  } catch(e) {
+    toast('Failed to save', 'error');
+  }
 }
 
-async function updateRestaurant(id){
-let name=document.getElementById(`rname-${id}`).value.trim()
-let phone=document.getElementById(`rphone-${id}`).value.trim()
-let prompt=document.getElementById(`rprompt-${id}`).value
-await fetch(`${API_BASE}/restaurants/${id}`,{
-method:"PUT",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({name, phone, ivr_text: prompt})
-})
-alert("Updated")
+// Stats
+async function loadStats() {
+  try {
+    const r = await fetch(`${API_BASE}/dashboard/stats`);
+    const s = await r.json();
+    document.getElementById('s-restaurants').textContent = s.restaurants ?? 0;
+    document.getElementById('s-calls').textContent = s.calls ?? 0;
+    document.getElementById('s-missed').textContent = s.missed ?? 0;
+    document.getElementById('s-duration').textContent = (Math.round((s.avg_duration ?? 0) * 10) / 10) + 's';
+  } catch(e) {}
 }
 
-function openRestaurant(id, silent){
-selectedId = id
-let r = restaurantsCache.find(x=>x.id===id)
-if(!r){
-document.getElementById("rdetail").innerHTML = "<h3>Restaurant</h3><div>Not found.</div>"
-return
-}
-document.getElementById("rdetail").innerHTML = `
-<h3>${esc(r.name||"Unnamed")}</h3>
-<input id="rname-${r.id}" value="${esc(r.name||"")}" placeholder="Name">
-<input id="rphone-${r.id}" value="${esc(r.phone||"")}" placeholder="Phone">
-<textarea id="rprompt-${r.id}" placeholder="Restaurant Prompt">${esc(r.ivr_text||"")}</textarea>
-<div class="actions">
-<button class="primary" onclick="updateRestaurant(${r.id})">Save</button>
-<button class="secondary" onclick="toggleRestaurant(${r.id})">${r.active ? "Deactivate" : "Activate"}</button>
-<button class="danger" onclick="deleteRestaurant(${r.id})">Delete</button>
-</div>
+// Logs
+async function loadLogs() {
+  try {
+    const r = await fetch(`${API_BASE}/calls/`);
+    const logs = await r.json();
+    const tbody = document.getElementById('logTable');
+    const recent = document.getElementById('recentLogs');
 
-<h3>Text Chat</h3>
-<div id="chat"></div>
-<input id="chatMsg" placeholder="Type message">
-<div class="actions">
-<button class="primary" onclick="sendChat()">Send</button>
-</div>
+    if (!logs.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📵</div><p>No calls yet</p></div></td></tr>`;
+      return;
+    }
 
-<h3>Voice Chat</h3>
-<div class="actions">
-<button class="primary" onclick="startVoice()">Start Voice</button>
-</div>
-`
-if(!silent){
-loadRestaurants()
-}
-}
+    const statusBadge = (s) => {
+      if (!s) return `<span class="badge badge-amber">Unknown</span>`;
+      const sl = s.toLowerCase();
+      if (sl.includes('answer') || sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
+      if (sl.includes('miss') || sl.includes('fail')) return `<span class="badge badge-red">${esc(s)}</span>`;
+      return `<span class="badge badge-blue">${esc(s)}</span>`;
+    };
 
-async function toggleRestaurant(id){
-await fetch(`${API_BASE}/restaurants/toggle/${id}`,{method:"POST"})
-loadRestaurants()
-}
+    const html = logs.map(l => `
+      <tr>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${l.id}</td>
+        <td>${esc(l.restaurant)}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
+        <td>${statusBadge(l.status)}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.duration)}s</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
+      </tr>`).join('');
 
-async function deleteRestaurant(id){
-if(!confirm("Delete this restaurant?")) return
-await fetch(`${API_BASE}/restaurants/${id}`,{method:"DELETE"})
-selectedId = null
-loadRestaurants()
-document.getElementById("rdetail").innerHTML = "<h3>Restaurant</h3><div>Select a restaurant to manage prompts and chat.</div>"
+    tbody.innerHTML = html;
+
+    // Recent logs on dashboard (top 5)
+    recent.innerHTML = logs.slice(0, 5).map(l => `
+      <tr>
+        <td>${esc(l.restaurant)}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
+        <td>${statusBadge(l.status)}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.duration)}s</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
+      </tr>`).join('');
+  } catch(e) {}
 }
 
-async function loadLogs(){
-let r=await fetch(`${API_BASE}/calls/`)
-let logs=await r.json()
-let html=""
-logs.forEach(l=>{
-html+=`
-<tr>
-<td>${l.id}</td>
-<td>${l.restaurant}</td>
-<td>${l.caller}</td>
-<td>${l.status}</td>
-<td>${l.duration}</td>
-<td>${l.created}</td>
-</tr>`
-})
-document.getElementById("logTable").innerHTML=html
+// Restaurants
+async function loadRestaurants() {
+  try {
+    const r = await fetch(`${API_BASE}/restaurants/`);
+    const data = await r.json();
+    restaurantsCache = data;
+
+    const list = document.getElementById('rlist');
+    if (!data.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:30px 16px"><div class="empty-icon" style="font-size:28px">🍽️</div><p style="font-size:12px">No restaurants yet</p></div>`;
+      return;
+    }
+
+    list.innerHTML = data.map(r => `
+      <button class="r-item ${r.id === selectedId ? 'active' : ''}" onclick="openRestaurant(${r.id})">
+        <div class="r-dot ${r.active ? 'on' : 'off'}"></div>
+        <span class="r-item-name">${esc(r.name || 'Unnamed')}</span>
+      </button>`).join('');
+
+    if (selectedId) openRestaurant(selectedId, true);
+  } catch(e) {}
 }
 
-async function sendChat(){
-if(!selectedId){alert("Select a restaurant");return}
-let msg=document.getElementById("chatMsg").value.trim()
-if(!msg) return
-let prompt=document.getElementById(`rprompt-${selectedId}`).value
-const chatEl = document.getElementById("chat")
-chatEl.innerHTML += `<div><b>You:</b> ${esc(msg)}</div>`
-document.getElementById("chatMsg").value=""
+async function addRestaurant() {
+  const name = document.getElementById('rname').value.trim();
+  const phone = document.getElementById('rphone').value.trim();
+  const prompt = document.getElementById('rprompt').value.trim();
+  if (!name) { toast('Restaurant name is required', 'error'); return; }
 
-let r = await fetch(`${API_BASE}/chat`,{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({message:msg, restaurant_prompt: prompt})
-})
-let data = await r.json()
-chatEl.innerHTML += `<div><b>AI:</b> ${esc(data.reply||"")}</div><br>`
-chatEl.scrollTop = chatEl.scrollHeight
+  try {
+    await fetch(`${API_BASE}/restaurants/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, ivr_text: prompt })
+    });
+    document.getElementById('rname').value = '';
+    document.getElementById('rphone').value = '';
+    document.getElementById('rprompt').value = '';
+    toast(`"${name}" added successfully`);
+    loadRestaurants();
+  } catch(e) {
+    toast('Failed to add restaurant', 'error');
+  }
 }
 
-async function startVoice(){
-if(!selectedId){alert("Select a restaurant");return}
-let prompt=document.getElementById(`rprompt-${selectedId}`).value
+async function updateRestaurant(id) {
+  const name = document.getElementById(`rname-${id}`).value.trim();
+  const phone = document.getElementById(`rphone-${id}`).value.trim();
+  const prompt = document.getElementById(`rprompt-${id}`).value;
 
-const tokenResponse = await fetch(`${API_BASE}/voice-session`,{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({restaurant_prompt: prompt})
-});
-const session = await tokenResponse.json();
-if(!session.client_secret || !session.client_secret.value){
-alert("Voice session error")
-return
-}
-const EPHEMERAL_KEY = session.client_secret.value;
-
-const pc = new RTCPeerConnection();
-const audioEl=document.createElement("audio");audioEl.autoplay=true;
-pc.ontrack=e=>audioEl.srcObject=e.streams[0];
-
-const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-stream.getTracks().forEach(track=>pc.addTrack(track,stream));
-
-const offer=await pc.createOffer();
-await pc.setLocalDescription(offer);
-
-const baseUrl="https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
-
-const sdpResponse=await fetch(baseUrl,{
-method:"POST",
-body:offer.sdp,
-headers:{Authorization:`Bearer ${EPHEMERAL_KEY}`,"Content-Type":"application/sdp"}
-});
-
-const answer={type:"answer",sdp:await sdpResponse.text()}
-await pc.setRemoteDescription(answer);
+  try {
+    await fetch(`${API_BASE}/restaurants/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, ivr_text: prompt })
+    });
+    toast('Restaurant updated');
+    loadRestaurants();
+  } catch(e) {
+    toast('Update failed', 'error');
+  }
 }
 
-loadGlobal()
-loadRestaurants()
-loadLogs()
+function openRestaurant(id, silent) {
+  selectedId = id;
+  const r = restaurantsCache.find(x => x.id === id);
+  if (!r) return;
 
+  document.getElementById('rdetail').innerHTML = `
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
+        ${esc(r.name || 'Unnamed')}
+        <span class="badge ${r.active ? 'badge-green' : 'badge-red'}" style="margin-left:auto">${r.active ? 'Active' : 'Inactive'}</span>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input id="rname-${r.id}" value="${esc(r.name || '')}" placeholder="Restaurant Name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input id="rphone-${r.id}" value="${esc(r.phone || '')}" placeholder="+1 (555) 000-0000">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">IVR Prompt</label>
+        <textarea id="rprompt-${r.id}" placeholder="Restaurant prompt...">${esc(r.ivr_text || '')}</textarea>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary btn-sm" onclick="updateRestaurant(${r.id})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
+          Save
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleRestaurant(${r.id})">
+          ${r.active ? '⏸ Deactivate' : '▶ Activate'}
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRestaurant(${r.id})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Text Chat</div>
+      <div class="chat-box" id="chat"></div>
+      <div class="chat-input-row">
+        <input id="chatMsg" placeholder="Test the AI assistant..." onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Voice Chat</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Start a real-time voice call with the AI assistant for this restaurant.</p>
+      <button class="voice-btn" id="voiceBtn" onclick="startVoice()">
+        🎙️ Start Voice Session
+      </button>
+    </div>
+  `;
+
+  if (!silent) loadRestaurants();
+}
+
+async function toggleRestaurant(id) {
+  try {
+    await fetch(`${API_BASE}/restaurants/toggle/${id}`, { method: 'POST' });
+    toast('Status updated');
+    loadRestaurants();
+  } catch(e) {
+    toast('Failed', 'error');
+  }
+}
+
+async function deleteRestaurant(id) {
+  if (!confirm('Delete this restaurant? This cannot be undone.')) return;
+  try {
+    await fetch(`${API_BASE}/restaurants/${id}`, { method: 'DELETE' });
+    selectedId = null;
+    toast('Restaurant deleted');
+    loadRestaurants();
+    document.getElementById('rdetail').innerHTML = `<div class="card" style="text-align:center;padding:60px 20px"><div style="font-size:42px;margin-bottom:12px;opacity:0.3">👆</div><div style="color:var(--muted);font-size:14px">Select a restaurant to manage it</div></div>`;
+  } catch(e) {
+    toast('Delete failed', 'error');
+  }
+}
+
+// Chat
+async function sendChat() {
+  if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
+  const msg = document.getElementById('chatMsg').value.trim();
+  if (!msg) return;
+  const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
+  const chatEl = document.getElementById('chat');
+
+  chatEl.innerHTML += `<div class="chat-msg user"><div class="sender">You</div><div class="bubble">${esc(msg)}</div></div>`;
+  document.getElementById('chatMsg').value = '';
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  // Typing indicator
+  const typingId = 'typing-' + Date.now();
+  chatEl.innerHTML += `<div class="chat-msg ai" id="${typingId}"><div class="sender">AI</div><div class="bubble"><span class="loading"></span></div></div>`;
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  try {
+    const r = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, restaurant_prompt: prompt })
+    });
+    const data = await r.json();
+    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble">${esc(data.reply || '')}</div></div>`;
+  } catch(e) {
+    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">AI</div><div class="bubble" style="color:var(--red)">Connection error</div></div>`;
+  }
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+// Voice
+async function startVoice() {
+  if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
+  const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
+  const btn = document.getElementById('voiceBtn');
+
+  try {
+    const tokenResponse = await fetch(`${API_BASE}/voice-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurant_prompt: prompt })
+    });
+    const session = await tokenResponse.json();
+    if (!session.client_secret?.value) { toast('Voice session error', 'error'); return; }
+
+    const EPHEMERAL_KEY = session.client_secret.value;
+    const pc = new RTCPeerConnection();
+    const audioEl = document.createElement('audio');
+    audioEl.autoplay = true;
+    pc.ontrack = e => audioEl.srcObject = e.streams[0];
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+      method: 'POST',
+      body: offer.sdp,
+      headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, 'Content-Type': 'application/sdp' }
+    });
+
+    const answer = { type: 'answer', sdp: await sdpResponse.text() };
+    await pc.setRemoteDescription(answer);
+
+    btn.textContent = '🔴 End Voice Session';
+    btn.classList.add('active');
+    toast('Voice session started');
+  } catch(e) {
+    toast('Voice error: ' + e.message, 'error');
+  }
+}
+
+// Init
+loadGlobal();
+loadRestaurants();
+loadStats();
+loadLogs();
 </script>
 </body>
 </html>
