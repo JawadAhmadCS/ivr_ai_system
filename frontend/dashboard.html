@@ -1134,16 +1134,26 @@ function normalizeUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '');
 }
 
+function sanitizeTwilioBaseUrl(url) {
+  let cleaned = normalizeUrl(url);
+  cleaned = cleaned.replace(/\/incoming-call(?:\/\d+)?(?:\?.*)?$/i, '');
+  return cleaned;
+}
+
 function getPublicBaseUrl() {
-  return normalizeUrl(localStorage.getItem('twilioBaseUrl') || '');
+  return sanitizeTwilioBaseUrl(localStorage.getItem('twilioBaseUrl') || '');
 }
 
 function setPublicBaseUrl(url) {
-  localStorage.setItem('twilioBaseUrl', normalizeUrl(url));
+  localStorage.setItem('twilioBaseUrl', sanitizeTwilioBaseUrl(url));
+}
+
+function getTwilioBaseUrl() {
+  return sanitizeTwilioBaseUrl(getPublicBaseUrl() || API_BASE);
 }
 
 function buildTwilioUrl(id) {
-  const base = normalizeUrl(getPublicBaseUrl() || API_BASE);
+  const base = getTwilioBaseUrl();
   return `${base}/incoming-call/${id}`;
 }
 
@@ -1333,6 +1343,7 @@ function openRestaurant(id, silent) {
       <div class="form-group">
         <label class="form-label">${t('Public Base URL (ngrok/hosted)')}</label>
         <input id="twilioBaseUrl" placeholder="https://xxxx.ngrok-free.app" value="${esc(getPublicBaseUrl())}"
+          oninput="setPublicBaseUrl(this.value); document.getElementById('twilioUrl').value=buildTwilioUrl(${r.id})"
           onblur="setPublicBaseUrl(this.value); document.getElementById('twilioUrl').value=buildTwilioUrl(${r.id})">
       </div>
       <div class="form-group">
