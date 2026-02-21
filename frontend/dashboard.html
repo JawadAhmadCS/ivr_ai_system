@@ -970,6 +970,9 @@
 <script>
 // ─── I18N ────────────────────────────────────────────────────────────────────
 const TRANSLATIONS = {
+  en: {
+    "Twilio guide": "To integrate this agent with your Twilio number: go to Twilio Console -> Phone Numbers -> Active Numbers -> select your number -> Voice Configuration -> A Call Comes In -> choose Webhook, paste this URL, and save using HTTP POST."
+  },
   he: {
     "Platform": "פלטפורמה",
     "Dashboard": "לוח בקרה",
@@ -1020,7 +1023,7 @@ const TRANSLATIONS = {
     "Start Voice Session": "התחל שיחה קולית",
     "End Voice Session": "סיים שיחה קולית",
     "Twilio Webhook": "וובהוק Twilio",
-    "Twilio desc": "הדבק URL זה ב-Twilio ← A Call Comes In",
+    "Twilio guide": "כדי לחבר את הסוכן הזה למספר ה-Twilio שלך: עבור ל-Twilio Console ← Phone Numbers ← Active Numbers ← בחר את המספר ← Voice Configuration ← A Call Comes In ← בחר Webhook, הדבק את ה-URL הזה ושמור באמצעות HTTP POST.",
     "Public Base URL (ngrok/hosted)": "כתובת בסיס ציבורית (ngrok/hosted)",
     "Twilio Webhook URL": "כתובת Webhook של Twilio",
     "Copy": "העתק",
@@ -1054,7 +1057,7 @@ const TRANSLATIONS = {
 let currentLang = localStorage.getItem('ui_lang') || 'en';
 
 function t(key) {
-  if (currentLang === 'en') return key;
+  if (currentLang === 'en') return (TRANSLATIONS.en && TRANSLATIONS.en[key]) || key;
   return (TRANSLATIONS.he && TRANSLATIONS.he[key]) || key;
 }
 
@@ -1337,16 +1340,9 @@ function openRestaurant(id, silent) {
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${t('Voice Chat desc')}</p>
       <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎙️ ${t('Start Voice Session')}</button>
     </div>
-
+ 
     <div class="card">
       <div class="section-title">${t('Twilio Webhook')}</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${t('Twilio desc')}</p>
-      <div class="form-group">
-        <label class="form-label">${t('Public Base URL (ngrok/hosted)')}</label>
-        <input id="twilioBaseUrl" placeholder="https://xxxx.ngrok-free.app" value="${esc(getPublicBaseUrl())}"
-          oninput="setPublicBaseUrl(this.value); document.getElementById('twilioUrl').value=buildTwilioUrl(${r.id})"
-          onblur="setPublicBaseUrl(this.value); document.getElementById('twilioUrl').value=buildTwilioUrl(${r.id})">
-      </div>
       <div class="form-group">
         <label class="form-label">${t('Twilio Webhook URL')}</label>
         <div class="twilio-row">
@@ -1354,8 +1350,13 @@ function openRestaurant(id, silent) {
           <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">${t('Copy')}</button>
         </div>
       </div>
+      <span data-i18n="Tips">${t('Tips')}</span>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6">${t('Twilio guide')}</p>
     </div>
+   
+
   `;
+  
 
   if (!silent) loadRestaurants();
 }
