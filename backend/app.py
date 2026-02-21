@@ -203,10 +203,16 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         qs += f"&caller={quote_plus(caller)}"
     if call_sid:
         qs += f"&call_sid={quote_plus(call_sid)}"
+    path = request.url.path or ""
+    root_path = request.scope.get("root_path") or ""
+    prefix = root_path
+    if not prefix and path.startswith("/api/"):
+        prefix = "/api"
+
     if restaurant_id is not None:
-        connect.stream(url=f"wss://{host}/media-stream/{restaurant_id}?{qs}")
+        connect.stream(url=f"wss://{host}{prefix}/media-stream/{restaurant_id}?{qs}")
     else:
-        connect.stream(url=f"wss://{host}/media-stream?{qs}")
+        connect.stream(url=f"wss://{host}{prefix}/media-stream?{qs}")
     response.append(connect)
 
     return HTMLResponse(content=str(response), media_type="application/xml")

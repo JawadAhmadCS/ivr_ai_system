@@ -795,7 +795,7 @@
         <div class="stat-icon">📵</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Avg Duration">Avg Duration</div>
+        <div class="stat-label" data-i18n="Total Duration">Total Duration</div>
         <div class="stat-value" id="s-duration">—</div>
         <div class="stat-icon">⏱️</div>
       </div>
@@ -1188,7 +1188,8 @@ async function loadStats() {
     document.getElementById('s-restaurants').textContent = s.restaurants ?? 0;
     document.getElementById('s-calls').textContent = s.calls ?? 0;
     document.getElementById('s-missed').textContent = s.missed ?? 0;
-    document.getElementById('s-duration').textContent = (Math.round((s.avg_duration ?? 0) * 10) / 10) + 's';
+    const totalDuration = s.total_duration ?? 0;
+    document.getElementById('s-duration').textContent = (Math.round(totalDuration * 10) / 10) + 's';
   } catch(e) {}
 }
 

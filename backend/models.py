@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text
 from datetime import datetime
 from database import Base
 
@@ -9,7 +9,7 @@ class Restaurant(Base):
     name = Column(String(200))
     phone = Column(String(50))
     active = Column(Boolean, default=True)
-    ivr_text = Column(String(1000))
+    ivr_text = Column(Text)
 
 class CallLog(Base):
     __tablename__ = "call_logs"
