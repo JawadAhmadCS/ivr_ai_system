@@ -30,7 +30,6 @@ VOICE = os.getenv("VOICE", "alloy")
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = BASE_DIR / "prompts"
-GLOBAL_FILE = PROMPT_DIR / "global_prompt.txt"
 RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
 
 
@@ -56,9 +55,12 @@ if not OPENAI_API_KEY:
 
 
 def load_global_prompt() -> str:
-    if GLOBAL_FILE.exists():
-        return GLOBAL_FILE.read_text(encoding="utf-8")
-    return "You are a restaurant AI assistant."
+    db = SessionLocal()
+    try:
+        row = db.get(models.GlobalPrompt, 1)
+        return row.content if row and row.content else "You are a restaurant AI assistant."
+    finally:
+        db.close()
 
 
 def load_restaurants():

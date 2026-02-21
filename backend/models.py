@@ -19,3 +19,10 @@ class CallLog(Base):
     duration = Column(Float, default=0)
     status = Column(String(50))
     created = Column(DateTime, default=datetime.utcnow)
+
+
+class GlobalPrompt(Base):
+    __tablename__ = "global_prompts"
+    id = Column(Integer, primary_key=True)
+    content = Column(Text)
+    updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
