@@ -3,6 +3,8 @@ import json
 import asyncio
 import websockets
 from pathlib import Path
+from datetime import datetime
+from urllib.parse import quote_plus
 
 import httpx
 import requests
@@ -86,6 +88,33 @@ def get_restaurant_prompt(restaurant_id: int | None) -> str:
         db.close()
 
 
+def get_restaurant_name(restaurant_id: int | None) -> str:
+    if not restaurant_id:
+        return "Unknown"
+    db = SessionLocal()
+    try:
+        r = db.get(models.Restaurant, restaurant_id)
+        return r.name if (r and r.name) else f"#{restaurant_id}"
+    finally:
+        db.close()
+
+
+def save_call_log(restaurant_name: str, caller: str, duration: float, status: str):
+    db = SessionLocal()
+    try:
+        db.add(
+            models.CallLog(
+                restaurant=restaurant_name,
+                caller=caller,
+                duration=duration,
+                status=status,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def restaurant_exists_and_active(restaurant_id: int) -> bool:
     db = SessionLocal()
     try:
@@ -156,6 +185,12 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         if q_id and q_id.isdigit():
             restaurant_id = int(q_id)
 
+    params = dict(request.query_params)
+    caller = params.get("From") or params.get("Caller") or "Unknown"
+    caller = str(caller) if caller is not None else "Unknown"
+    call_sid = params.get("CallSid") or ""
+    call_sid = str(call_sid) if call_sid is not None else ""
+
     if restaurant_id is not None and not restaurant_exists_and_active(restaurant_id):
         response.say("Invalid restaurant id. Please contact support.", voice="alice")
         response.append(Hangup())
@@ -163,10 +198,15 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
     host = request.headers.get("host")
     connect = Connect()
+    qs = "edge=dublin"
+    if caller:
+        qs += f"&caller={quote_plus(caller)}"
+    if call_sid:
+        qs += f"&call_sid={quote_plus(call_sid)}"
     if restaurant_id is not None:
-        connect.stream(url=f"wss://{host}/media-stream/{restaurant_id}?edge=dublin")
+        connect.stream(url=f"wss://{host}/media-stream/{restaurant_id}?{qs}")
     else:
-        connect.stream(url=f"wss://{host}/media-stream?edge=dublin")
+        connect.stream(url=f"wss://{host}/media-stream?{qs}")
     response.append(connect)
 
     return HTMLResponse(content=str(response), media_type="application/xml")
@@ -324,6 +364,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
     print("Twilio connected")
 
     instructions = get_restaurant_prompt(restaurant_id)
+    restaurant_name = get_restaurant_name(restaurant_id)
+    caller = websocket.query_params.get("caller") or "Unknown"
 
     async with websockets.connect(
         f"wss://api.openai.com/v1/realtime?model={REALTIME_MODEL}&temperature={TEMPERATURE}",
@@ -335,15 +377,29 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
         stream_sid = None
         last_assistant_item = None
+        start_ts = None
+        logged = False
+
+        def log_call():
+            nonlocal logged
+            if logged:
+                return
+            logged = True
+            end_ts = datetime.utcnow()
+            duration = (end_ts - start_ts).total_seconds() if start_ts else 0
+            status = "missed" if duration < 3 else "completed"
+            save_call_log(restaurant_name, caller, float(duration), status)
 
         async def receive_twilio():
             nonlocal stream_sid
+            nonlocal start_ts
             try:
                 async for message in websocket.iter_text():
                     data = json.loads(message)
 
                     if data["event"] == "start":
                         stream_sid = data["start"]["streamSid"]
+                        start_ts = datetime.utcnow()
                         print("Stream started:", stream_sid)
 
                     elif data["event"] == "media":
@@ -396,7 +452,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             }
                         )
 
-        await asyncio.gather(receive_twilio(), send_twilio())
+        try:
+            await asyncio.gather(receive_twilio(), send_twilio())
+        finally:
+            log_call()
 
 
 @app.websocket("/media-stream")
@@ -409,6 +468,18 @@ async def handle_media_stream(websocket: WebSocket):
 @app.websocket("/media-stream/{restaurant_id}")
 async def handle_media_stream_restaurant(websocket: WebSocket, restaurant_id: int):
     await handle_media_stream_with_id(websocket, restaurant_id)
+
+
+@app.get("/media-stream")
+@app.get("/media-stream/{restaurant_id}")
+def media_stream_http_guard(restaurant_id: int | None = None):
+    return JSONResponse(
+        status_code=426,
+        content={
+            "error": "WebSocket required",
+            "detail": "Use the Twilio Voice webhook /incoming-call to initiate a WebSocket media stream.",
+        },
+    )
 
 
 if __name__ == "__main__":
