@@ -203,6 +203,8 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         response.append(Hangup())
         return HTMLResponse(content=str(response), media_type="application/xml")
 
+    # response.say("Hello, how can I help you?", voice="alice")
+
     host = request.headers.get("host")
     connect = Connect()
     qs = "edge=dublin"
@@ -378,6 +380,18 @@ async def init_session(openai_ws, instructions: str):
         },
     }
     await openai_ws.send(json.dumps(session))
+    # Kick off with a greeting from the assistant
+    await openai_ws.send(
+        json.dumps(
+            {
+                "type": "response.create",
+                "response": {
+                    "instructions": "Greet the caller and ask how you can help.",
+                    "output_modalities": ["audio"],
+                },
+            }
+        )
+    )
 
 
 async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int | None):
