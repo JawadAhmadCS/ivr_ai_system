@@ -1,9 +1,10 @@
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from database import SessionLocal
 import models
+from auth import require_auth, require_admin
 
 router = APIRouter(prefix="/restaurants")
 
@@ -28,7 +29,7 @@ def serialize_restaurant(r: models.Restaurant):
     }
 
 @router.post("/add")
-def add_restaurant(payload: RestaurantCreate):
+def add_restaurant(payload: RestaurantCreate, _user=Depends(require_admin)):
     db = SessionLocal()
     try:
         r = models.Restaurant(
@@ -44,16 +45,21 @@ def add_restaurant(payload: RestaurantCreate):
         db.close()
 
 @router.get("/")
-def list_restaurants():
+def list_restaurants(user=Depends(require_auth)):
     db = SessionLocal()
     try:
-        rows = db.query(models.Restaurant).all()
+        q = db.query(models.Restaurant)
+        if not user.is_admin:
+            if not user.restaurant_id:
+                return []
+            q = q.filter_by(id=user.restaurant_id)
+        rows = q.all()
         return [serialize_restaurant(r) for r in rows]
     finally:
         db.close()
 
 @router.post("/toggle/{id}")
-def toggle(id:int):
+def toggle(id:int, _user=Depends(require_admin)):
     db = SessionLocal()
     try:
         r = db.get(models.Restaurant, id)
@@ -66,12 +72,14 @@ def toggle(id:int):
         db.close()
 
 @router.put("/{id}")
-def update_restaurant(id: int, payload: RestaurantUpdate):
+def update_restaurant(id: int, payload: RestaurantUpdate, user=Depends(require_auth)):
     db = SessionLocal()
     try:
         r = db.get(models.Restaurant, id)
         if not r:
             raise HTTPException(status_code=404, detail="Restaurant not found")
+        if not user.is_admin and user.restaurant_id != id:
+            raise HTTPException(status_code=403, detail="Forbidden")
         if payload.name is not None:
             r.name = payload.name.strip()
         if payload.phone is not None:
@@ -79,6 +87,8 @@ def update_restaurant(id: int, payload: RestaurantUpdate):
         if payload.ivr_text is not None:
             r.ivr_text = payload.ivr_text
         if payload.active is not None:
+            if not user.is_admin:
+                raise HTTPException(status_code=403, detail="Forbidden")
             r.active = payload.active
         db.commit()
         return serialize_restaurant(r)
@@ -86,7 +96,7 @@ def update_restaurant(id: int, payload: RestaurantUpdate):
         db.close()
 
 @router.delete("/{id}")
-def delete_restaurant(id: int):
+def delete_restaurant(id: int, _user=Depends(require_admin)):
     db = SessionLocal()
     try:
         r = db.get(models.Restaurant, id)

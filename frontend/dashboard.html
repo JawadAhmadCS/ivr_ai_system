@@ -806,11 +806,11 @@
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span data-i18n="Dashboard">Dashboard</span>
     </button>
-    <button class="nav-btn" onclick="show('global',this)">
+    <button id="nav-global" class="nav-btn" onclick="show('global',this)">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       <span data-i18n="Global Prompt">Global Prompt</span>
     </button>
-    <button class="nav-btn" onclick="show('restaurants',this)">
+    <button id="nav-restaurants" class="nav-btn" onclick="show('restaurants',this)">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
       <span data-i18n="Restaurants">Restaurants</span>
     </button>
@@ -940,7 +940,7 @@
       <div class="restaurant-list">
         <div class="r-list-header">
           <span data-i18n="Restaurant List">Restaurant List</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleCreate()" title="Add new">
+          <button id="createBtn" class="btn btn-ghost btn-sm" onclick="toggleCreate()" title="Add new">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -977,6 +977,35 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span data-i18n="Create Restaurant">Create Restaurant</span>
             </button>
+          </div>
+        </div>
+
+        <div id="assignBox" class="card" style="display:none">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+            <span data-i18n="Assign Admin">Assign Admin</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" data-i18n="Admin Email">Admin Email</label>
+              <input id="adminEmail" placeholder="manager@example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="Temp Password">Temp Password</label>
+              <input id="adminPassword" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="Restaurant">Restaurant</label>
+            <select id="adminRestaurant"></select>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" onclick="createOrAssignAdmin()">
+              <span data-i18n="Create/Assign">Create/Assign</span>
+            </button>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px" data-i18n="Assign Admin Help">
+            If user exists, we only assign. If not, we create with password.
           </div>
         </div>
 
@@ -1039,7 +1068,13 @@ const TRANSLATIONS = {
     "Password": "Password",
     "Logout": "Logout",
     "Invalid credentials": "Invalid credentials",
-    "Logged out": "Logged out"
+    "Logged out": "Logged out",
+    "Assign Admin": "Assign Admin",
+    "Admin Email": "Admin Email",
+    "Temp Password": "Temp Password",
+    "Create/Assign": "Create/Assign",
+    "Assign Admin Help": "If user exists, we only assign. If not, we create with password.",
+    "Admin assigned": "Admin assigned"
   },
   he: {
     "Platform": "פלטפורמה",
@@ -1119,6 +1154,12 @@ const TRANSLATIONS = {
     "Twilio URL copied": "כתובת Twilio הועתקה",
     "Copy failed": "ההעתקה נכשלה",
     "Delete this restaurant? This cannot be undone.": "למחוק את המסעדה? לא ניתן לבטל.",
+    "Assign Admin": "הקצאת מנהל",
+    "Admin Email": "אימייל מנהל",
+    "Temp Password": "סיסמה זמנית",
+    "Create/Assign": "צור/שייך",
+    "Assign Admin Help": "אם המשתמש קיים נשייך בלבד. אם לא, ניצור עם סיסמה.",
+    "Admin assigned": "מנהל שויך"
   }
 };
 
@@ -1181,6 +1222,8 @@ const authState = {
 };
 
 let initialized = false;
+let currentUser = null;
+let usersCache = [];
 
 function setAuthToken(token) {
   authState.token = token || '';
@@ -1242,6 +1285,10 @@ async function login() {
   }
 }
 
+document.getElementById('authPassword')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login();
+});
+
 async function logout() {
   try {
     if (authState.token) {
@@ -1258,7 +1305,9 @@ async function checkAuth() {
     return false;
   }
   try {
-    await apiFetch(`${API_BASE}/auth/me`);
+    const me = await (await apiFetch(`${API_BASE}/auth/me`)).json();
+    currentUser = me;
+    applyRoleUI();
     hideLogin();
     return true;
   } catch (e) {
@@ -1267,9 +1316,36 @@ async function checkAuth() {
   }
 }
 
+async function loadMe() {
+  try {
+    const me = await (await apiFetch(`${API_BASE}/auth/me`)).json();
+    currentUser = me;
+    applyRoleUI();
+  } catch (e) {}
+}
+
+function applyRoleUI() {
+  const isAdmin = !!currentUser?.is_admin;
+  const navGlobal = document.getElementById('nav-global');
+  if (navGlobal) navGlobal.style.display = isAdmin ? '' : 'none';
+  const assignBox = document.getElementById('assignBox');
+  if (assignBox) assignBox.style.display = isAdmin ? 'block' : 'none';
+  const createBox = document.getElementById('createBox');
+  if (createBox && !isAdmin) createBox.style.display = 'none';
+  const createBtn = document.getElementById('createBtn');
+  if (createBtn) createBtn.style.display = isAdmin ? '' : 'none';
+  if (!isAdmin) {
+    const btns = document.querySelectorAll('.nav-btn');
+    btns.forEach(b => {
+      if (b.id === 'nav-global') return;
+    });
+  }
+}
+
 async function initAfterAuth() {
   if (initialized) return;
   initialized = true;
+  await loadMe();
   loadGlobal();
   loadRestaurants();
   loadStats();
@@ -1404,6 +1480,7 @@ async function loadRestaurants() {
   try {
     const data = await (await apiFetch(`${API_BASE}/restaurants/`)).json();
     restaurantsCache = data;
+    if (currentUser?.is_admin) populateAdminRestaurant();
     const list = document.getElementById('rlist');
     if (!data.length) {
       list.innerHTML = `<div class="empty-state" style="padding:30px 16px"><div class="empty-icon" style="font-size:28px">🍽️</div><p>${t('No restaurants yet')}</p></div>`;
@@ -1416,6 +1493,12 @@ async function loadRestaurants() {
       </button>`).join('');
     if (selectedId) openRestaurant(selectedId, true);
   } catch(e) {}
+}
+
+function populateAdminRestaurant() {
+  const sel = document.getElementById('adminRestaurant');
+  if (!sel) return;
+  sel.innerHTML = restaurantsCache.map(r => `<option value="${r.id}">${esc(r.name || 'Unnamed')}</option>`).join('');
 }
 
 async function addRestaurant() {
@@ -1455,9 +1538,16 @@ function openRestaurant(id, silent) {
   const r = restaurantsCache.find(x => x.id === id);
   if (!r) return;
 
+  const isAdmin = !!currentUser?.is_admin;
   const isActive = r.active;
   const activeLabel = isActive ? t('Active') : t('Inactive');
   const toggleLabel = isActive ? `⏸ ${t('Deactivate')}` : `▶ ${t('Activate')}`;
+  const adminActions = isAdmin ? `
+        <button class="btn btn-secondary btn-sm" onclick="toggleRestaurant(${r.id})">${toggleLabel}</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRestaurant(${r.id})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          ${t('Delete')}
+        </button>` : ``;
 
   document.getElementById('rdetail').innerHTML = `
     <div class="card">
@@ -1485,11 +1575,7 @@ function openRestaurant(id, silent) {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
           ${t('Save')}
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="toggleRestaurant(${r.id})">${toggleLabel}</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteRestaurant(${r.id})">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          ${t('Delete')}
-        </button>
+        ${adminActions}
       </div>
     </div>
 
@@ -1534,6 +1620,59 @@ async function toggleRestaurant(id) {
     toast('Status updated');
     loadRestaurants();
   } catch(e) { toast('Failed', 'error'); }
+}
+
+async function createOrAssignAdmin() {
+  if (!currentUser?.is_admin) return;
+  const email = document.getElementById('adminEmail').value.trim();
+  const password = document.getElementById('adminPassword').value;
+  const restaurantId = parseInt(document.getElementById('adminRestaurant').value, 10);
+  if (!email || !restaurantId) { toast('Failed', 'error'); return; }
+
+  const clearForm = () => {
+    document.getElementById('adminEmail').value = '';
+    document.getElementById('adminPassword').value = '';
+  };
+
+  const assignExisting = async () => {
+    const res = await apiFetch(`${API_BASE}/auth/users/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, restaurant_id: restaurantId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'assign failed');
+    }
+    toast('Admin assigned');
+    clearForm();
+  };
+
+  try {
+    if (!password) {
+      await assignExisting();
+      return;
+    }
+
+    const res = await apiFetch(`${API_BASE}/auth/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, restaurant_id: restaurantId })
+    });
+    if (res.ok) {
+      toast('Admin assigned');
+      clearForm();
+      return;
+    }
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      await assignExisting();
+      return;
+    }
+    throw new Error(err.detail || 'create failed');
+  } catch (e) {
+    toast(e.message || 'Failed', 'error');
+  }
 }
 
 async function deleteRestaurant(id) {

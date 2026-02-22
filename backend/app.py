@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse, Connect, Hangup
 
-from database import engine, SessionLocal
+from database import engine, SessionLocal, ensure_schema
 import models
 from routes import restaurant, call_logs, dashboard, prompt, auth as auth_routes
 from auth import ensure_admin_user, require_auth
@@ -45,6 +45,7 @@ app.add_middleware(
 )
 
 models.Base.metadata.create_all(bind=engine)
+ensure_schema()
 
 app.include_router(auth_routes.router)
 app.include_router(restaurant.router, dependencies=[Depends(require_auth)])
@@ -103,11 +104,12 @@ def get_restaurant_name(restaurant_id: int | None) -> str:
         db.close()
 
 
-def save_call_log(restaurant_name: str, caller: str, duration: float, status: str):
+def save_call_log(restaurant_id: int | None, restaurant_name: str, caller: str, duration: float, status: str):
     db = SessionLocal()
     try:
         db.add(
             models.CallLog(
+                restaurant_id=restaurant_id,
                 restaurant=restaurant_name,
                 caller=caller,
                 duration=duration,
@@ -224,10 +226,14 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
 
 @app.post("/chat")
-async def chat_with_ai(data: dict):
+async def chat_with_ai(data: dict, user=Depends(require_auth)):
     user_msg = data.get("message", "")
     restaurant_prompt = data.get("restaurant_prompt")
     restaurant_id = data.get("restaurant_id")
+    if not user.is_admin:
+        if not user.restaurant_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        restaurant_id = user.restaurant_id
     final_prompt = compose_system_prompt(restaurant_prompt)
     if not (restaurant_prompt or "").strip() and restaurant_id is not None:
         try:
@@ -286,11 +292,15 @@ async def chat_with_ai(data: dict):
 
 
 @app.api_route("/voice-session", methods=["GET", "POST"])
-def create_voice_session(request: Request, data: dict | None = None):
+def create_voice_session(request: Request, data: dict | None = None, user=Depends(require_auth)):
     try:
         data = data or {}
         restaurant_prompt = data.get("restaurant_prompt")
         restaurant_id = data.get("restaurant_id") or request.query_params.get("restaurant_id")
+        if not user.is_admin:
+            if not user.restaurant_id:
+                raise HTTPException(status_code=403, detail="Forbidden")
+            restaurant_id = user.restaurant_id
 
         final_prompt = compose_system_prompt(restaurant_prompt)
         if not (restaurant_prompt or "").strip() and restaurant_id is not None:
@@ -399,7 +409,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             end_ts = datetime.utcnow()
             duration = (end_ts - start_ts).total_seconds() if start_ts else 0
             status = "missed" if duration < 3 else "completed"
-            save_call_log(restaurant_name, caller, float(duration), status)
+            save_call_log(restaurant_id, restaurant_name, caller, float(duration), status)
 
         async def receive_twilio():
             nonlocal stream_sid

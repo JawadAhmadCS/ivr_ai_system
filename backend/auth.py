@@ -109,6 +109,12 @@ def require_auth(
     return user
 
 
+def require_admin(user: models.User = Depends(require_auth)) -> models.User:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+
 def require_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> str:

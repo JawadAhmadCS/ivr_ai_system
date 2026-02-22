@@ -14,6 +14,7 @@ class Restaurant(Base):
 class CallLog(Base):
     __tablename__ = "call_logs"
     id = Column(Integer, primary_key=True)
+    restaurant_id = Column(Integer, index=True, nullable=True)
     restaurant = Column(String(200))
     caller = Column(String(50))
     duration = Column(Float, default=0)
@@ -33,6 +34,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    restaurant_id = Column(Integer, index=True, nullable=True)
     active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     created = Column(DateTime, default=datetime.utcnow)
