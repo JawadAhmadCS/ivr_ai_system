@@ -386,7 +386,7 @@ async def init_session(openai_ws, instructions: str):
             {
                 "type": "response.create",
                 "response": {
-                    "instructions": "Greet the caller and ask how you can help.",
+                    "instructions": "ברכי את המתקשר ושאלי איך אפשר לעזור לו היום, בעברית.",
                     "output_modalities": ["audio"],
                 },
             }
