@@ -74,6 +74,17 @@ def revoke_token(token_value: str) -> None:
         db.close()
 
 
+def revoke_user_tokens(user_id: int) -> None:
+    db = SessionLocal()
+    try:
+        db.query(models.AuthToken).filter_by(user_id=user_id, revoked=False).update(
+            {"revoked": True}
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def _get_token_record(token_value: str) -> tuple[models.User, models.AuthToken] | None:
     db = SessionLocal()
     try:

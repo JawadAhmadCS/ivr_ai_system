@@ -472,6 +472,17 @@
   .r-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .r-dot.off { background: var(--muted); }
   .r-item-name { flex: 1; font-weight: 500; }
+  .r-item-actions { display: flex; gap: 6px; }
+  .r-mini-btn {
+    border: 1px solid var(--border);
+    background: var(--subtle);
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .r-mini-btn:hover { border-color: #2a3f5f; }
 
   /* ── CHAT ── */
   .chat-box {
@@ -1074,7 +1085,12 @@ const TRANSLATIONS = {
     "Temp Password": "Temp Password",
     "Create/Assign": "Create/Assign",
     "Assign Admin Help": "If user exists, we only assign. If not, we create with password.",
-    "Admin assigned": "Admin assigned"
+    "Admin assigned": "Admin assigned",
+    "Admins for this restaurant": "Admins for this restaurant",
+    "No admins assigned": "No admins assigned",
+    "Revoke Access": "Revoke Access",
+    "Restore Access": "Restore Access",
+    "Loading...": "Loading..."
   },
   he: {
     "Platform": "פלטפורמה",
@@ -1159,7 +1175,12 @@ const TRANSLATIONS = {
     "Temp Password": "סיסמה זמנית",
     "Create/Assign": "צור/שייך",
     "Assign Admin Help": "אם המשתמש קיים נשייך בלבד. אם לא, ניצור עם סיסמה.",
-    "Admin assigned": "מנהל שויך"
+    "Admin assigned": "מנהל שויך",
+    "Admins for this restaurant": "מנהלים למסעדה זו",
+    "No admins assigned": "אין מנהלים משויכים",
+    "Revoke Access": "בטל גישה",
+    "Restore Access": "שחזר גישה",
+    "Loading...": "טוען..."
   }
 };
 
@@ -1486,11 +1507,16 @@ async function loadRestaurants() {
       list.innerHTML = `<div class="empty-state" style="padding:30px 16px"><div class="empty-icon" style="font-size:28px">🍽️</div><p>${t('No restaurants yet')}</p></div>`;
       return;
     }
+    const isAdmin = !!currentUser?.is_admin;
     list.innerHTML = data.map(r => `
-      <button class="r-item ${r.id === selectedId ? 'active' : ''}" onclick="openRestaurant(${r.id})">
+      <div class="r-item ${r.id === selectedId ? 'active' : ''}">
         <div class="r-dot ${r.active ? 'on' : 'off'}"></div>
-        <span class="r-item-name">${esc(r.name || 'Unnamed')}</span>
-      </button>`).join('');
+        <span class="r-item-name" onclick="openRestaurant(${r.id})">${esc(r.name || 'Unnamed')}</span>
+        ${isAdmin ? `
+        <div class="r-item-actions">
+          <button class="r-mini-btn" onclick="showAssignForRestaurant(${r.id})">👤</button>
+        </div>` : ``}
+      </div>`).join('');
     if (selectedId) openRestaurant(selectedId, true);
   } catch(e) {}
 }
@@ -1499,6 +1525,46 @@ function populateAdminRestaurant() {
   const sel = document.getElementById('adminRestaurant');
   if (!sel) return;
   sel.innerHTML = restaurantsCache.map(r => `<option value="${r.id}">${esc(r.name || 'Unnamed')}</option>`).join('');
+}
+
+async function loadAdminsForRestaurant(restaurantId) {
+  const list = document.getElementById('adminList');
+  if (!list) return;
+  list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('Loading...')}</div>`;
+  try {
+    const data = await (await apiFetch(`${API_BASE}/auth/users/by-restaurant/${restaurantId}`)).json();
+    if (!data.length) {
+      list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('No admins assigned')}</div>`;
+      return;
+    }
+    list.innerHTML = data.map(u => `
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--border);padding:8px;border-radius:8px;background:var(--surface2)">
+        <div style="display:flex;flex-direction:column">
+          <span style="font-size:13px">${esc(u.email)}</span>
+          <span style="font-size:11px;color:var(--muted)">${u.active ? t('Active') : t('Inactive')}</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="setUserStatus(${u.id}, ${u.active ? 'false' : 'true'})">
+          ${u.active ? t('Revoke Access') : t('Restore Access')}
+        </button>
+      </div>`).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--red);font-size:12px">${t('Failed')}</div>`;
+  }
+}
+
+async function setUserStatus(userId, active) {
+  try {
+    await apiFetch(`${API_BASE}/auth/users/${userId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active })
+    });
+    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
+    if (restaurantId) loadAdminsForRestaurant(restaurantId);
+    toast(active ? 'Restore Access' : 'Revoke Access');
+  } catch (e) {
+    toast('Failed', 'error');
+  }
 }
 
 async function addRestaurant() {
@@ -1588,6 +1654,12 @@ function openRestaurant(id, silent) {
       </div>
     </div>
 
+    ${isAdmin ? `
+    <div class="card">
+      <div class="section-title">${t('Admins for this restaurant')}</div>
+      <div id="adminList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>` : ``}
+
     <div class="card">
       <div class="section-title">${t('Voice Chat')}</div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${t('Voice Chat desc')}</p>
@@ -1610,6 +1682,7 @@ function openRestaurant(id, silent) {
 
   `;
   
+  if (isAdmin) loadAdminsForRestaurant(r.id);
 
   if (!silent) loadRestaurants();
 }
@@ -1620,6 +1693,17 @@ async function toggleRestaurant(id) {
     toast('Status updated');
     loadRestaurants();
   } catch(e) { toast('Failed', 'error'); }
+}
+
+function showAssignForRestaurant(id) {
+  if (!currentUser?.is_admin) return;
+  const sel = document.getElementById('adminRestaurant');
+  if (sel) sel.value = String(id);
+  const box = document.getElementById('assignBox');
+  if (box) box.style.display = 'block';
+  const email = document.getElementById('adminEmail');
+  if (email) email.focus();
+  loadAdminsForRestaurant(id);
 }
 
 async function createOrAssignAdmin() {

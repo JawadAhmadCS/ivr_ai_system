@@ -35,6 +35,11 @@ TOKEN_TTL_HOURS=24
 
 `TOKEN_TTL_HOURS` optional hai. Default 24 hours hai.
 
+### Restaurant Admin Assignment
+
+Owner (super admin) per-restaurant admins create/assign kar sakta hai. UI me "Assign Admin" card aur restaurant list ke saath 👤 icon se assignment hoti hai.
+Security note: passwords kabhi UI me show nahi kiye ja sakte (hash hotay hain). Agar password bhool jayein, naya password set karke user ko re-create karein.
+
 ## Admin Login
 
 Email/password auth enabled hai. `.env` me ye variables add karein:

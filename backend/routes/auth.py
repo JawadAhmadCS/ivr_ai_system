@@ -11,6 +11,7 @@ from auth import (
     require_admin,
     require_token,
     hash_password,
+    revoke_user_tokens,
 )
 
 router = APIRouter(prefix="/auth")
@@ -31,6 +32,10 @@ class UserCreatePayload(BaseModel):
 class UserAssignPayload(BaseModel):
     email: str
     restaurant_id: int | None = None
+
+
+class UserStatusPayload(BaseModel):
+    active: bool
 
 
 @router.post("/login")
@@ -139,5 +144,46 @@ def assign_user(payload: UserAssignPayload, _user=Depends(require_admin)):
         user.restaurant_id = payload.restaurant_id
         db.commit()
         return {"ok": True, "restaurant_id": user.restaurant_id}
+    finally:
+        db.close()
+
+
+@router.get("/users/by-restaurant/{restaurant_id}")
+def users_by_restaurant(restaurant_id: int, _user=Depends(require_admin)):
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(models.User)
+            .filter_by(restaurant_id=restaurant_id, is_admin=False)
+            .order_by(models.User.id.desc())
+            .all()
+        )
+        return [
+            {
+                "id": u.id,
+                "email": u.email,
+                "active": u.active,
+                "restaurant_id": u.restaurant_id,
+            }
+            for u in rows
+        ]
+    finally:
+        db.close()
+
+
+@router.post("/users/{user_id}/status")
+def set_user_status(user_id: int, payload: UserStatusPayload, _user=Depends(require_admin)):
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.is_admin:
+            raise HTTPException(status_code=400, detail="Cannot change admin user")
+        user.active = bool(payload.active)
+        db.commit()
+        if not user.active:
+            revoke_user_tokens(user.id)
+        return {"ok": True, "active": user.active}
     finally:
         db.close()
