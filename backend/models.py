@@ -26,3 +26,23 @@ class GlobalPrompt(Base):
     id = Column(Integer, primary_key=True)
     content = Column(Text)
     updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    created = Column(DateTime, default=datetime.utcnow)
+
+
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    created = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False)

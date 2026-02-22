@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 import httpx
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, Request, HTTPException
+from fastapi import FastAPI, WebSocket, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
@@ -17,7 +17,8 @@ from twilio.twiml.voice_response import VoiceResponse, Connect, Hangup
 
 from database import engine, SessionLocal
 import models
-from routes import restaurant, call_logs, dashboard, prompt
+from routes import restaurant, call_logs, dashboard, prompt, auth as auth_routes
+from auth import ensure_admin_user, require_auth
 
 load_dotenv()
 
@@ -45,10 +46,11 @@ app.add_middleware(
 
 models.Base.metadata.create_all(bind=engine)
 
-app.include_router(restaurant.router)
-app.include_router(call_logs.router)
-app.include_router(dashboard.router)
-app.include_router(prompt.router)
+app.include_router(auth_routes.router)
+app.include_router(restaurant.router, dependencies=[Depends(require_auth)])
+app.include_router(call_logs.router, dependencies=[Depends(require_auth)])
+app.include_router(dashboard.router, dependencies=[Depends(require_auth)])
+app.include_router(prompt.router, dependencies=[Depends(require_auth)])
 
 if not OPENAI_API_KEY:
     raise ValueError("Missing the OpenAI API key. Please set it in the .env file.")
@@ -163,6 +165,7 @@ def check_openai_connectivity():
 async def startup_openai_check():
     ok, detail = check_openai_connectivity()
     log_openai_status("startup", ok, detail)
+    ensure_admin_user()
 
 
 @app.get("/health/openai", response_class=JSONResponse)

@@ -23,6 +23,30 @@ python -m http.server 8000
 7. Dashboard ke through aap system use kar sakte hain.
 8. Note (local): frontend `8000` par chalta hai aur API calls backend `http://localhost:5050` par jati hain, isliye backend process running hona chahiye.
 
+## Admin Auth
+
+Dashboard access ke liye admin login required hai. `.env` me ye set karein:
+
+```
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your-strong-password
+TOKEN_TTL_HOURS=24
+```
+
+`TOKEN_TTL_HOURS` optional hai. Default 24 hours hai.
+
+## Admin Login
+
+Email/password auth enabled hai. `.env` me ye variables add karein:
+
+```env
+ADMIN_EMAIL="admin@example.com"
+ADMIN_PASSWORD="change-this-password"
+TOKEN_TTL_HOURS=24
+```
+
+Dashboard open karte hi login screen ayegi. Same creds se sign in karein.
+
 ## Frontend Server (VPS)
 
 ### Frontend start command

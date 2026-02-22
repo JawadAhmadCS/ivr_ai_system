@@ -13,8 +13,20 @@ const API_BASE = (() => {
   return isLocalStaticFrontend ? apiOrigin : `${apiOrigin}/api`;
 })();
 
+const AUTH_TOKEN = localStorage.getItem("auth_token") || "";
+
+async function apiFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (AUTH_TOKEN) headers.Authorization = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetch(path, { ...options, headers });
+  if (res.status === 401) {
+    throw new Error("Unauthorized");
+  }
+  return res;
+}
+
 async function loadStats(){
-let r = await fetch(`${API_BASE}/dashboard/stats`)
+let r = await apiFetch(`${API_BASE}/dashboard/stats`)
 let data = await r.json()
 
 document.getElementById("stats").innerHTML = `
@@ -25,4 +37,3 @@ Avg Duration: ${data.avg_duration}
 `
 }
 loadStats()
-

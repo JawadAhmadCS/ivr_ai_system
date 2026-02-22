@@ -7,3 +7,4 @@ python-dotenv
 twilio
 websockets
 httpx
+passlib

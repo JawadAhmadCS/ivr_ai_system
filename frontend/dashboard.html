@@ -722,6 +722,48 @@
 
   /* Card-title badge push */
   .card-title .badge-ml { margin-inline-start: auto; }
+
+  /* AUTH */
+  .auth-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,20,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+  }
+
+  .auth-hidden { display: none; }
+
+  .auth-card {
+    width: min(380px, 92vw);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+  }
+
+  .auth-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .auth-subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .auth-error {
+    color: var(--red);
+    font-size: 12px;
+    margin-top: 8px;
+    min-height: 16px;
+  }
 </style>
 </head>
 <body dir="ltr">
@@ -731,6 +773,24 @@
   <button class="lang-opt active" onclick="setLang('en')">EN</button>
   <div class="lang-divider"></div>
   <button class="lang-opt" onclick="setLang('he')">עב</button>
+</div>
+
+<!-- Auth Modal -->
+<div id="authModal" class="auth-modal auth-hidden">
+  <div class="auth-card">
+    <div class="auth-title" data-i18n="Sign in">Sign in</div>
+    <div class="auth-subtitle" data-i18n="Sign in to continue">Sign in to continue</div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="Email">Email</label>
+      <input id="authEmail" type="email" placeholder="admin@example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="Password">Password</label>
+      <input id="authPassword" type="password" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary" onclick="login()" data-i18n="Sign in">Sign in</button>
+    <div id="authError" class="auth-error"></div>
+  </div>
 </div>
 
 <!-- Sidebar -->
@@ -765,6 +825,7 @@
       <div class="status-dot"></div>
       <span data-i18n="System Online">System Online</span>
     </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="logout()" data-i18n="Logout">Logout</button>
   </div>
 </nav>
 
@@ -971,7 +1032,14 @@
 // ─── I18N ────────────────────────────────────────────────────────────────────
 const TRANSLATIONS = {
   en: {
-    "Twilio guide": "To integrate this agent with your Twilio number: go to Twilio Console -> Phone Numbers -> Active Numbers -> select your number -> Voice Configuration -> A Call Comes In -> choose Webhook, paste this URL, and save using HTTP POST."
+    "Twilio guide": "To integrate this agent with your Twilio number: go to Twilio Console -> Phone Numbers -> Active Numbers -> select your number -> Voice Configuration -> A Call Comes In -> choose Webhook, paste this URL, and save using HTTP POST.",
+    "Sign in": "Sign in",
+    "Sign in to continue": "Sign in to continue",
+    "Email": "Email",
+    "Password": "Password",
+    "Logout": "Logout",
+    "Invalid credentials": "Invalid credentials",
+    "Logged out": "Logged out"
   },
   he: {
     "Platform": "פלטפורמה",
@@ -1108,6 +1176,105 @@ const API_BASE = (() => {
 
   return isLocalStaticFrontend ? apiOrigin : `${apiOrigin}/api`;
 })();
+const authState = {
+  token: localStorage.getItem('auth_token') || ''
+};
+
+let initialized = false;
+
+function setAuthToken(token) {
+  authState.token = token || '';
+  if (authState.token) {
+    localStorage.setItem('auth_token', authState.token);
+  } else {
+    localStorage.removeItem('auth_token');
+  }
+}
+
+function showLogin(message) {
+  const modal = document.getElementById('authModal');
+  const err = document.getElementById('authError');
+  err.textContent = message || '';
+  modal.classList.remove('auth-hidden');
+}
+
+function hideLogin() {
+  const modal = document.getElementById('authModal');
+  const err = document.getElementById('authError');
+  err.textContent = '';
+  modal.classList.add('auth-hidden');
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (authState.token) headers.Authorization = `Bearer ${authState.token}`;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    setAuthToken('');
+    showLogin(t('Sign in to continue'));
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+async function login() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const err = document.getElementById('authError');
+  err.textContent = '';
+  if (!email || !password) {
+    err.textContent = t('Invalid credentials');
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error('auth failed');
+    setAuthToken(data.token);
+    hideLogin();
+    await initAfterAuth();
+  } catch (e) {
+    err.textContent = t('Invalid credentials');
+  }
+}
+
+async function logout() {
+  try {
+    if (authState.token) {
+      await apiFetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+    }
+  } catch (e) {}
+  setAuthToken('');
+  showLogin(t('Logged out'));
+}
+
+async function checkAuth() {
+  if (!authState.token) {
+    showLogin();
+    return false;
+  }
+  try {
+    await apiFetch(`${API_BASE}/auth/me`);
+    hideLogin();
+    return true;
+  } catch (e) {
+    showLogin(t('Sign in to continue'));
+    return false;
+  }
+}
+
+async function initAfterAuth() {
+  if (initialized) return;
+  initialized = true;
+  loadGlobal();
+  loadRestaurants();
+  loadStats();
+  loadLogs();
+}
 let restaurantsCache = [];
 let selectedId = null;
 
@@ -1168,7 +1335,7 @@ function toggleCreate() {
 // ─── API CALLS ────────────────────────────────────────────────────────────────
 async function loadGlobal() {
   try {
-    const r = await fetch(`${API_BASE}/prompt/`);
+    const r = await apiFetch(`${API_BASE}/prompt/`);
     const d = await r.json();
     document.getElementById('globalPrompt').value = d.prompt || '';
   } catch(e) {}
@@ -1176,7 +1343,7 @@ async function loadGlobal() {
 
 async function saveGlobal() {
   try {
-    await fetch(`${API_BASE}/prompt/save`, {
+    await apiFetch(`${API_BASE}/prompt/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: document.getElementById('globalPrompt').value })
@@ -1187,7 +1354,7 @@ async function saveGlobal() {
 
 async function loadStats() {
   try {
-    const s = await (await fetch(`${API_BASE}/dashboard/stats`)).json();
+    const s = await (await apiFetch(`${API_BASE}/dashboard/stats`)).json();
     document.getElementById('s-restaurants').textContent = s.restaurants ?? 0;
     document.getElementById('s-calls').textContent = s.calls ?? 0;
     document.getElementById('s-missed').textContent = s.missed ?? 0;
@@ -1206,7 +1373,7 @@ function statusBadge(s) {
 
 async function loadLogs() {
   try {
-    const logs = await (await fetch(`${API_BASE}/calls/`)).json();
+    const logs = await (await apiFetch(`${API_BASE}/calls/`)).json();
     const tbody = document.getElementById('logTable');
     const recent = document.getElementById('recentLogs');
     if (!logs.length) {
@@ -1235,7 +1402,7 @@ async function loadLogs() {
 
 async function loadRestaurants() {
   try {
-    const data = await (await fetch(`${API_BASE}/restaurants/`)).json();
+    const data = await (await apiFetch(`${API_BASE}/restaurants/`)).json();
     restaurantsCache = data;
     const list = document.getElementById('rlist');
     if (!data.length) {
@@ -1257,7 +1424,7 @@ async function addRestaurant() {
   const prompt = document.getElementById('rprompt').value.trim();
   if (!name) { toast('Restaurant name is required', 'error'); return; }
   try {
-    await fetch(`${API_BASE}/restaurants/add`, {
+    await apiFetch(`${API_BASE}/restaurants/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, phone, ivr_text: prompt })
@@ -1273,7 +1440,7 @@ async function updateRestaurant(id) {
   const phone = document.getElementById(`rphone-${id}`).value.trim();
   const prompt = document.getElementById(`rprompt-${id}`).value;
   try {
-    await fetch(`${API_BASE}/restaurants/${id}`, {
+    await apiFetch(`${API_BASE}/restaurants/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, phone, ivr_text: prompt })
@@ -1363,7 +1530,7 @@ function openRestaurant(id, silent) {
 
 async function toggleRestaurant(id) {
   try {
-    await fetch(`${API_BASE}/restaurants/toggle/${id}`, { method: 'POST' });
+    await apiFetch(`${API_BASE}/restaurants/toggle/${id}`, { method: 'POST' });
     toast('Status updated');
     loadRestaurants();
   } catch(e) { toast('Failed', 'error'); }
@@ -1372,7 +1539,7 @@ async function toggleRestaurant(id) {
 async function deleteRestaurant(id) {
   if (!confirm(t('Delete this restaurant? This cannot be undone.'))) return;
   try {
-    await fetch(`${API_BASE}/restaurants/${id}`, { method: 'DELETE' });
+    await apiFetch(`${API_BASE}/restaurants/${id}`, { method: 'DELETE' });
     selectedId = null;
     toast('Restaurant deleted');
     loadRestaurants();
@@ -1408,7 +1575,7 @@ async function sendChat() {
   chatEl.scrollTop = chatEl.scrollHeight;
 
   try {
-    const r = await fetch(`${API_BASE}/chat`, {
+    const r = await apiFetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: msg, restaurant_prompt: prompt })
@@ -1431,7 +1598,7 @@ async function startVoice() {
   const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
   const btn = document.getElementById('voiceBtn');
   try {
-    const session = await (await fetch(`${API_BASE}/voice-session`, {
+    const session = await (await apiFetch(`${API_BASE}/voice-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurant_prompt: prompt })
@@ -1462,10 +1629,9 @@ async function startVoice() {
 // Apply saved language on load
 if (currentLang === 'he') setLang('he');
 
-loadGlobal();
-loadRestaurants();
-loadStats();
-loadLogs();
+checkAuth().then(ok => {
+  if (ok) initAfterAuth();
+});
 </script>
 </body>
 </html>
