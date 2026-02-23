@@ -13,6 +13,7 @@ from fastapi import FastAPI, WebSocket, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
+from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Hangup
 
 from database import engine, SessionLocal, ensure_schema
@@ -28,6 +29,7 @@ PORT = int(os.getenv("PORT", 5050))
 REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.3))
 VOICE = os.getenv("VOICE", "alloy")
+LLM_HANGUP_TOKEN = (os.getenv("LLM_HANGUP_TOKEN") or "<hangup>").strip()
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
@@ -78,14 +80,7 @@ def load_restaurants():
 def compose_system_prompt(restaurant_prompt: str | None) -> str:
     global_prompt = load_global_prompt()
     addon = (restaurant_prompt or "").strip()
-    base_prompt = f"{global_prompt}\n{addon}" if addon else global_prompt
-    hangup_guardrail = (
-        "\n\nCall-end token policy:\n"
-        "1) Output `<hangup>` only when the caller clearly asks to end/disconnect the call now.\n"
-        "2) Otherwise, never output `<hangup>`.\n"
-        "3) If you output it, the entire response must be exactly `<hangup>` (no extra text)."
-    )
-    return f"{base_prompt}{hangup_guardrail}"
+    return f"{global_prompt}\n{addon}" if addon else global_prompt
 
 
 def get_restaurant_prompt(restaurant_id: int | None) -> str:
@@ -155,30 +150,67 @@ def extract_openai_error(body, fallback_text: str = "") -> str:
     return fallback_text[:300] if fallback_text else "Unknown OpenAI error"
 
 
-def is_hangup_token(text: str | None) -> bool:
-    return (text or "").strip().lower() == "<hangup>"
-
-
-async def end_twilio_call(call_sid: str | None) -> bool:
+def complete_twilio_call(call_sid: str) -> bool:
     if not call_sid:
         return False
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-        print("[TWILIO] Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN; cannot force hangup.")
+        print("[TWILIO] Missing TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN; skipping REST hangup")
         return False
-
-    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Calls/{call_sid}.json"
-    auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(url, auth=auth, data={"Status": "completed"})
-        ok = r.status_code < 400
-        if not ok:
-            print(f"[TWILIO] Hangup API failed for {call_sid}: HTTP {r.status_code} {r.text[:200]}")
-        return ok
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        client.calls(call_sid).update(status="completed")
+        print(f"[TWILIO] Call completed via REST API: {call_sid}")
+        return True
     except Exception as e:
-        print(f"[TWILIO] Hangup API error for {call_sid}: {e}")
+        print(f"[TWILIO] Failed to complete call {call_sid}: {e}")
         return False
+
+
+def extract_text_candidates(response: dict) -> list[str]:
+    if not isinstance(response, dict):
+        return []
+
+    event_type = str(response.get("type", ""))
+    if event_type == "response.output_audio.delta":
+        return []
+
+    texts = []
+    for key in ("delta", "text", "transcript"):
+        value = response.get(key)
+        if isinstance(value, str) and value:
+            texts.append(value)
+
+    for key in ("item", "response"):
+        nested = response.get(key)
+        if not isinstance(nested, dict):
+            continue
+
+        for nested_key in ("text", "transcript"):
+            value = nested.get(nested_key)
+            if isinstance(value, str) and value:
+                texts.append(value)
+
+        content = nested.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                for content_key in ("text", "transcript"):
+                    value = part.get(content_key)
+                    if isinstance(value, str) and value:
+                        texts.append(value)
+
+    return texts
+
+
+def contains_hangup_token(response: dict, token: str) -> bool:
+    if not token:
+        return False
+    marker = token.lower()
+    for text in extract_text_candidates(response):
+        if marker in text.lower():
+            return True
+    return False
 
 
 def check_openai_connectivity():
@@ -449,7 +481,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
         last_assistant_item = None
         start_ts = None
         logged = False
-        hangup_triggered = False
+        call_already_ending = False
 
         def log_call():
             nonlocal logged
@@ -492,39 +524,40 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 print("Twilio disconnected")
                 await openai_ws.close()
 
-        async def trigger_hangup():
-            nonlocal hangup_triggered
-            if hangup_triggered:
+        async def end_call_from_assistant():
+            nonlocal call_already_ending
+            if call_already_ending:
                 return
-            hangup_triggered = True
-            print(f"[CALL] Hangup token detected. Ending call_sid={call_sid or 'unknown'}")
-            await end_twilio_call(call_sid)
-            try:
-                await openai_ws.close()
-            except Exception:
-                pass
+            call_already_ending = True
+            print(f"[CALL] Assistant emitted hangup token {LLM_HANGUP_TOKEN!r}; ending call")
+            if call_sid:
+                await asyncio.to_thread(complete_twilio_call, call_sid)
             try:
                 await websocket.close()
             except Exception:
                 pass
-
-        def extract_text_from_response_done(response: dict) -> str:
-            # Fallback parser for structured response events.
-            parts = []
-            for item in response.get("response", {}).get("output", []) or []:
-                for content in item.get("content", []) or []:
-                    if isinstance(content, dict):
-                        if isinstance(content.get("text"), str):
-                            parts.append(content["text"])
-                        if isinstance(content.get("transcript"), str):
-                            parts.append(content["transcript"])
-            return " ".join(parts).strip()
+            try:
+                await openai_ws.close()
+            except Exception:
+                pass
 
         async def send_twilio():
             nonlocal last_assistant_item
 
             async for msg in openai_ws:
                 response = json.loads(msg)
+
+                if contains_hangup_token(response, LLM_HANGUP_TOKEN):
+                    await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                    if stream_sid:
+                        await websocket.send_json(
+                            {
+                                "event": "clear",
+                                "streamSid": stream_sid,
+                            }
+                        )
+                    await end_call_from_assistant()
+                    break
 
                 if response.get("type") == "response.output_audio.delta":
                     audio = response["delta"]
@@ -550,22 +583,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                 "streamSid": stream_sid,
                             }
                         )
-
-                if response.get("type") in ("response.audio_transcript.done", "response.output_text.done"):
-                    transcript_text = ""
-                    if isinstance(response.get("transcript"), str):
-                        transcript_text = response.get("transcript", "")
-                    elif isinstance(response.get("text"), str):
-                        transcript_text = response.get("text", "")
-                    if is_hangup_token(transcript_text):
-                        await trigger_hangup()
-                        break
-
-                if response.get("type") == "response.done":
-                    done_text = extract_text_from_response_done(response)
-                    if is_hangup_token(done_text):
-                        await trigger_hangup()
-                        break
 
         try:
             await asyncio.gather(receive_twilio(), send_twilio())
