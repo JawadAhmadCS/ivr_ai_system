@@ -27,11 +27,24 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
 REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.3))
+
 VOICE = os.getenv("VOICE", "alloy")
+INPUT_TRANSCRIPTION_MODEL = os.getenv("INPUT_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = BASE_DIR / "prompts"
 RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
+END_CALL_PHRASES = (
+    "end call",
+    "call end",
+    "cut the call",
+    "hang up",
+    "disconnect",
+    "goodbye",
+    "bye",
+    "ok bye",
+    "ok goodbye",
+)
 
 
 app = FastAPI()
@@ -364,9 +377,13 @@ async def init_session(openai_ws, instructions: str):
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
+                    "transcription": {
+                        "model": INPUT_TRANSCRIPTION_MODEL,
+                    },
                     "turn_detection": {
                         "type": "server_vad",
                         "threshold": 0.4,
+
                         "silence_duration_ms": 300,
                         "prefix_padding_ms": 150,
                     },
@@ -400,8 +417,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
     instructions = get_restaurant_prompt(restaurant_id)
     restaurant_name = get_restaurant_name(restaurant_id)
     caller = websocket.query_params.get("caller") or "Unknown"
+    call_sid = websocket.query_params.get("call_sid") or ""
 
     async with websockets.connect(
+
         f"wss://api.openai.com/v1/realtime?model={REALTIME_MODEL}&temperature={TEMPERATURE}",
         additional_headers={
             "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -460,6 +479,23 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
             async for msg in openai_ws:
                 response = json.loads(msg)
+
+                if response.get("type") == "conversation.item.input_audio_transcription.completed":
+                    transcript = (response.get("transcript") or "").strip().lower()
+                    if transcript:
+                        print(f"Caller transcript ({call_sid or 'unknown call'}): {transcript}")
+                    if transcript and any(phrase in transcript for phrase in END_CALL_PHRASES):
+                        print(f"End-call phrase detected ({call_sid or 'unknown call'}): {transcript}")
+                        await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                        await websocket.send_json(
+                            {
+                                "event": "clear",
+                                "streamSid": stream_sid,
+                            }
+                        )
+                        await websocket.close()
+                        await openai_ws.close()
+                        break
 
                 if response.get("type") == "response.output_audio.delta":
                     audio = response["delta"]
