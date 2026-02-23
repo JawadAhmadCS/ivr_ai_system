@@ -1524,6 +1524,17 @@ async function saveGlobal() {
   } catch(e) { toast('Failed to save', 'error'); }
 }
 
+function formatDuration(value) {
+  const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 async function loadStats() {
   try {
     const s = await (await apiFetch(`${API_BASE}/dashboard/stats`)).json();
@@ -1531,7 +1542,7 @@ async function loadStats() {
     document.getElementById('s-calls').textContent = s.calls ?? 0;
     document.getElementById('s-missed').textContent = s.missed ?? 0;
     const totalDuration = s.total_duration ?? 0;
-    document.getElementById('s-duration').textContent = (Math.round(totalDuration * 10) / 10) + 's';
+    document.getElementById('s-duration').textContent = formatDuration(totalDuration);
   } catch(e) {}
 }
 
@@ -1558,7 +1569,7 @@ async function loadLogs() {
         <td>${esc(l.restaurant)}</td>
         <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
         <td>${statusBadge(l.status)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.duration)}s</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${formatDuration(l.duration)}</td>
         <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
       </tr>`).join('');
     recent.innerHTML = logs.slice(0,5).map(l => `
@@ -1566,7 +1577,7 @@ async function loadLogs() {
         <td>${esc(l.restaurant)}</td>
         <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
         <td>${statusBadge(l.status)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.duration)}s</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${formatDuration(l.duration)}</td>
         <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
       </tr>`).join('');
   } catch(e) {}
