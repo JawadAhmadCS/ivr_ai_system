@@ -38,6 +38,15 @@ class UserStatusPayload(BaseModel):
     active: bool
 
 
+class UserPasswordPayload(BaseModel):
+    password: str
+
+
+class UserUpdatePayload(BaseModel):
+    email: str | None = None
+    password: str | None = None
+
+
 @router.post("/login")
 def login(payload: LoginPayload):
     ensure_admin_user()
@@ -185,5 +194,84 @@ def set_user_status(user_id: int, payload: UserStatusPayload, _user=Depends(requ
         if not user.active:
             revoke_user_tokens(user.id)
         return {"ok": True, "active": user.active}
+    finally:
+        db.close()
+
+
+@router.post("/users/{user_id}/password")
+def set_user_password(user_id: int, payload: UserPasswordPayload, _user=Depends(require_admin)):
+    new_password = (payload.password or "").strip()
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password too short")
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.is_admin:
+            raise HTTPException(status_code=400, detail="Cannot change admin user")
+        user.password_hash = hash_password(new_password)
+        db.commit()
+        revoke_user_tokens(user.id)
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+@router.put("/users/{user_id}")
+def update_user(user_id: int, payload: UserUpdatePayload, _user=Depends(require_admin)):
+    new_email = (payload.email or "").strip().lower()
+    new_password = (payload.password or "").strip()
+    if not new_email and not new_password:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if new_email and ("@" not in new_email or "." not in new_email):
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if new_password and len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password too short")
+    db = SessionLocal()
+    try:
+        password_changed = False
+        user = db.get(models.User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.is_admin:
+            raise HTTPException(status_code=400, detail="Cannot change admin user")
+        if new_email and new_email != user.email:
+            existing = db.query(models.User).filter_by(email=new_email).first()
+            if existing and existing.id != user.id:
+                raise HTTPException(status_code=409, detail="User already exists")
+            user.email = new_email
+        if new_password:
+            user.password_hash = hash_password(new_password)
+            password_changed = True
+        db.commit()
+        if password_changed:
+            revoke_user_tokens(user.id)
+        return {
+            "ok": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "active": user.active,
+                "restaurant_id": user.restaurant_id,
+            },
+        }
+    finally:
+        db.close()
+
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, _user=Depends(require_admin)):
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.is_admin:
+            raise HTTPException(status_code=400, detail="Cannot delete admin user")
+        revoke_user_tokens(user.id)
+        db.delete(user)
+        db.commit()
+        return {"ok": True}
     finally:
         db.close()

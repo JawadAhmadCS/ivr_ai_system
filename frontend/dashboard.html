@@ -1088,6 +1088,13 @@ const TRANSLATIONS = {
     "Admin assigned": "Admin assigned",
     "Admins for this restaurant": "Admins for this restaurant",
     "No admins assigned": "No admins assigned",
+    "Edit User": "Edit User",
+    "Delete User": "Delete User",
+    "Enter new email": "Enter new email",
+    "Enter new password (leave empty to keep current)": "Enter new password (leave empty to keep current)",
+    "User updated": "User updated",
+    "User deleted": "User deleted",
+    "Delete this user? This cannot be undone.": "Delete this user? This cannot be undone.",
     "Revoke Access": "Revoke Access",
     "Restore Access": "Restore Access",
     "Loading...": "Loading..."
@@ -1535,6 +1542,7 @@ async function loadAdminsForRestaurant(restaurantId) {
   list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('Loading...')}</div>`;
   try {
     const data = await (await apiFetch(`${API_BASE}/auth/users/by-restaurant/${restaurantId}`)).json();
+    usersCache = data;
     if (!data.length) {
       list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('No admins assigned')}</div>`;
       return;
@@ -1545,12 +1553,76 @@ async function loadAdminsForRestaurant(restaurantId) {
           <span style="font-size:13px">${esc(u.email)}</span>
           <span style="font-size:11px;color:var(--muted)">${u.active ? t('Active') : t('Inactive')}</span>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="setUserStatus(${u.id}, ${u.active ? 'false' : 'true'})">
-          ${u.active ? t('Revoke Access') : t('Restore Access')}
-        </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="editRestaurantUser(${u.id})" title="${t('Edit User')}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRestaurantUser(${u.id})" title="${t('Delete User')}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="setUserStatus(${u.id}, ${u.active ? 'false' : 'true'})">
+            ${u.active ? t('Revoke Access') : t('Restore Access')}
+          </button>
+        </div>
       </div>`).join('');
   } catch (e) {
     list.innerHTML = `<div style="color:var(--red);font-size:12px">${t('Failed')}</div>`;
+  }
+}
+
+async function editRestaurantUser(userId) {
+  const user = usersCache.find(u => u.id === userId);
+  if (!user) {
+    toast('Failed', 'error');
+    return;
+  }
+  const newEmailInput = prompt(t('Enter new email'), user.email || '');
+  if (newEmailInput === null) return;
+  const newEmail = String(newEmailInput || '').trim().toLowerCase();
+  if (!newEmail || !newEmail.includes('@') || !newEmail.includes('.')) {
+    toast('Invalid email', 'error');
+    return;
+  }
+  const newPasswordInput = prompt(t('Enter new password (leave empty to keep current)'));
+  if (newPasswordInput === null) return;
+  const newPassword = String(newPasswordInput || '').trim();
+  if (newPassword && newPassword.length < 6) {
+    toast('Password too short', 'error');
+    return;
+  }
+  const payload = { email: newEmail };
+  if (newPassword) payload.password = newPassword;
+  try {
+    const res = await apiFetch(`${API_BASE}/auth/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed');
+    }
+    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
+    if (restaurantId) loadAdminsForRestaurant(restaurantId);
+    toast('User updated');
+  } catch (e) {
+    toast(e.message || 'Failed', 'error');
+  }
+}
+
+async function deleteRestaurantUser(userId) {
+  if (!confirm(t('Delete this user? This cannot be undone.'))) return;
+  try {
+    const res = await apiFetch(`${API_BASE}/auth/users/${userId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed');
+    }
+    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
+    if (restaurantId) loadAdminsForRestaurant(restaurantId);
+    toast('User deleted');
+  } catch (e) {
+    toast(e.message || 'Failed', 'error');
   }
 }
 
