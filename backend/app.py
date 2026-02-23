@@ -523,6 +523,12 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             except WebSocketDisconnect:
                 print("Twilio disconnected")
                 await openai_ws.close()
+            except RuntimeError as e:
+                if "WebSocket is not connected" in str(e):
+                    print("Twilio websocket already closed before/while reading")
+                    await openai_ws.close()
+                    return
+                raise
 
         async def end_call_from_assistant():
             nonlocal call_already_ending
