@@ -775,6 +775,17 @@
     margin-top: 8px;
     min-height: 16px;
   }
+
+  .edit-modal-card {
+    width: min(440px, 92vw);
+  }
+
+  .edit-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body dir="ltr">
@@ -801,6 +812,27 @@
     </div>
     <button class="btn btn-primary" onclick="login()" data-i18n="Sign in">Sign in</button>
     <div id="authError" class="auth-error"></div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="editUserModal" class="auth-modal auth-hidden">
+  <div class="auth-card edit-modal-card">
+    <div class="auth-title" data-i18n="Edit User">Edit User</div>
+    <div class="auth-subtitle" data-i18n="Update email and password for this user">Update email and password for this user</div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="Admin Email">Admin Email</label>
+      <input id="editUserEmail" type="email" placeholder="manager@example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="New Password (optional)">New Password (optional)</label>
+      <input id="editUserPassword" type="password" placeholder="••••••••">
+    </div>
+    <div id="editUserError" class="auth-error"></div>
+    <div class="edit-modal-actions">
+      <button class="btn btn-secondary btn-sm" onclick="closeEditUserModal()" data-i18n="Cancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEditedUser()" data-i18n="Save Changes">Save Changes</button>
+    </div>
   </div>
 </div>
 
@@ -1095,6 +1127,9 @@ const TRANSLATIONS = {
     "User updated": "User updated",
     "User deleted": "User deleted",
     "Delete this user? This cannot be undone.": "Delete this user? This cannot be undone.",
+    "Update email and password for this user": "Update email and password for this user",
+    "New Password (optional)": "New Password (optional)",
+    "Cancel": "Cancel",
     "Revoke Access": "Revoke Access",
     "Restore Access": "Restore Access",
     "Loading...": "Loading..."
@@ -1252,6 +1287,7 @@ const authState = {
 let initialized = false;
 let currentUser = null;
 let usersCache = [];
+let editingUserId = null;
 
 function setAuthToken(token) {
   authState.token = token || '';
@@ -1274,6 +1310,18 @@ function hideLogin() {
   const err = document.getElementById('authError');
   err.textContent = '';
   modal.classList.add('auth-hidden');
+}
+
+function closeEditUserModal() {
+  const modal = document.getElementById('editUserModal');
+  const err = document.getElementById('editUserError');
+  const email = document.getElementById('editUserEmail');
+  const password = document.getElementById('editUserPassword');
+  if (err) err.textContent = '';
+  if (email) email.value = '';
+  if (password) password.value = '';
+  editingUserId = null;
+  modal?.classList.add('auth-hidden');
 }
 
 async function apiFetch(url, options = {}) {
@@ -1315,6 +1363,18 @@ async function login() {
 
 document.getElementById('authPassword')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') login();
+});
+
+document.getElementById('editUserPassword')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveEditedUser();
+});
+
+document.getElementById('editUserModal')?.addEventListener('click', (e) => {
+  if (e.target?.id === 'editUserModal') closeEditUserModal();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeEditUserModal();
 });
 
 async function logout() {
@@ -1576,37 +1636,49 @@ async function editRestaurantUser(userId) {
     toast('Failed', 'error');
     return;
   }
-  const newEmailInput = prompt(t('Enter new email'), user.email || '');
-  if (newEmailInput === null) return;
-  const newEmail = String(newEmailInput || '').trim().toLowerCase();
+  editingUserId = userId;
+  const modal = document.getElementById('editUserModal');
+  const err = document.getElementById('editUserError');
+  const email = document.getElementById('editUserEmail');
+  const password = document.getElementById('editUserPassword');
+  if (err) err.textContent = '';
+  if (email) email.value = user.email || '';
+  if (password) password.value = '';
+  modal?.classList.remove('auth-hidden');
+  email?.focus();
+}
+
+async function saveEditedUser() {
+  if (!editingUserId) return;
+  const err = document.getElementById('editUserError');
+  const newEmail = String(document.getElementById('editUserEmail')?.value || '').trim().toLowerCase();
+  const newPassword = String(document.getElementById('editUserPassword')?.value || '').trim();
   if (!newEmail || !newEmail.includes('@') || !newEmail.includes('.')) {
-    toast('Invalid email', 'error');
+    if (err) err.textContent = t('Invalid email');
     return;
   }
-  const newPasswordInput = prompt(t('Enter new password (leave empty to keep current)'));
-  if (newPasswordInput === null) return;
-  const newPassword = String(newPasswordInput || '').trim();
   if (newPassword && newPassword.length < 6) {
-    toast('Password too short', 'error');
+    if (err) err.textContent = t('Password too short');
     return;
   }
   const payload = { email: newEmail };
   if (newPassword) payload.password = newPassword;
   try {
-    const res = await apiFetch(`${API_BASE}/auth/users/${userId}`, {
+    const res = await apiFetch(`${API_BASE}/auth/users/${editingUserId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed');
+      throw new Error(err.detail || t('Failed'));
     }
+    closeEditUserModal();
     const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
     if (restaurantId) loadAdminsForRestaurant(restaurantId);
     toast('User updated');
   } catch (e) {
-    toast(e.message || 'Failed', 'error');
+    if (err) err.textContent = e.message || t('Failed');
   }
 }
 
