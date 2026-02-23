@@ -27,24 +27,13 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
 REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.3))
-
 VOICE = os.getenv("VOICE", "alloy")
-INPUT_TRANSCRIPTION_MODEL = os.getenv("INPUT_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = BASE_DIR / "prompts"
 RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
-END_CALL_PHRASES = (
-    "end call",
-    "call end",
-    "cut the call",
-    "hang up",
-    "disconnect",
-    "goodbye",
-    "bye",
-    "ok bye",
-    "ok goodbye",
-)
 
 
 app = FastAPI()
@@ -89,7 +78,14 @@ def load_restaurants():
 def compose_system_prompt(restaurant_prompt: str | None) -> str:
     global_prompt = load_global_prompt()
     addon = (restaurant_prompt or "").strip()
-    return f"{global_prompt}\n{addon}" if addon else global_prompt
+    base_prompt = f"{global_prompt}\n{addon}" if addon else global_prompt
+    hangup_guardrail = (
+        "\n\nCall-end token policy:\n"
+        "1) Output `<hangup>` only when the caller clearly asks to end/disconnect the call now.\n"
+        "2) Otherwise, never output `<hangup>`.\n"
+        "3) If you output it, the entire response must be exactly `<hangup>` (no extra text)."
+    )
+    return f"{base_prompt}{hangup_guardrail}"
 
 
 def get_restaurant_prompt(restaurant_id: int | None) -> str:
@@ -157,6 +153,32 @@ def extract_openai_error(body, fallback_text: str = "") -> str:
             if msg:
                 return str(msg)
     return fallback_text[:300] if fallback_text else "Unknown OpenAI error"
+
+
+def is_hangup_token(text: str | None) -> bool:
+    return (text or "").strip().lower() == "<hangup>"
+
+
+async def end_twilio_call(call_sid: str | None) -> bool:
+    if not call_sid:
+        return False
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        print("[TWILIO] Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN; cannot force hangup.")
+        return False
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Calls/{call_sid}.json"
+    auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(url, auth=auth, data={"Status": "completed"})
+        ok = r.status_code < 400
+        if not ok:
+            print(f"[TWILIO] Hangup API failed for {call_sid}: HTTP {r.status_code} {r.text[:200]}")
+        return ok
+    except Exception as e:
+        print(f"[TWILIO] Hangup API error for {call_sid}: {e}")
+        return False
 
 
 def check_openai_connectivity():
@@ -377,13 +399,9 @@ async def init_session(openai_ws, instructions: str):
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
-                    "transcription": {
-                        "model": INPUT_TRANSCRIPTION_MODEL,
-                    },
                     "turn_detection": {
                         "type": "server_vad",
                         "threshold": 0.4,
-
                         "silence_duration_ms": 300,
                         "prefix_padding_ms": 150,
                     },
@@ -420,7 +438,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
     call_sid = websocket.query_params.get("call_sid") or ""
 
     async with websockets.connect(
-
         f"wss://api.openai.com/v1/realtime?model={REALTIME_MODEL}&temperature={TEMPERATURE}",
         additional_headers={
             "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -432,6 +449,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
         last_assistant_item = None
         start_ts = None
         logged = False
+        hangup_triggered = False
 
         def log_call():
             nonlocal logged
@@ -474,28 +492,39 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 print("Twilio disconnected")
                 await openai_ws.close()
 
+        async def trigger_hangup():
+            nonlocal hangup_triggered
+            if hangup_triggered:
+                return
+            hangup_triggered = True
+            print(f"[CALL] Hangup token detected. Ending call_sid={call_sid or 'unknown'}")
+            await end_twilio_call(call_sid)
+            try:
+                await openai_ws.close()
+            except Exception:
+                pass
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+
+        def extract_text_from_response_done(response: dict) -> str:
+            # Fallback parser for structured response events.
+            parts = []
+            for item in response.get("response", {}).get("output", []) or []:
+                for content in item.get("content", []) or []:
+                    if isinstance(content, dict):
+                        if isinstance(content.get("text"), str):
+                            parts.append(content["text"])
+                        if isinstance(content.get("transcript"), str):
+                            parts.append(content["transcript"])
+            return " ".join(parts).strip()
+
         async def send_twilio():
             nonlocal last_assistant_item
 
             async for msg in openai_ws:
                 response = json.loads(msg)
-
-                if response.get("type") == "conversation.item.input_audio_transcription.completed":
-                    transcript = (response.get("transcript") or "").strip().lower()
-                    if transcript:
-                        print(f"Caller transcript ({call_sid or 'unknown call'}): {transcript}")
-                    if transcript and any(phrase in transcript for phrase in END_CALL_PHRASES):
-                        print(f"End-call phrase detected ({call_sid or 'unknown call'}): {transcript}")
-                        await openai_ws.send(json.dumps({"type": "response.cancel"}))
-                        await websocket.send_json(
-                            {
-                                "event": "clear",
-                                "streamSid": stream_sid,
-                            }
-                        )
-                        await websocket.close()
-                        await openai_ws.close()
-                        break
 
                 if response.get("type") == "response.output_audio.delta":
                     audio = response["delta"]
@@ -521,6 +550,22 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                 "streamSid": stream_sid,
                             }
                         )
+
+                if response.get("type") in ("response.audio_transcript.done", "response.output_text.done"):
+                    transcript_text = ""
+                    if isinstance(response.get("transcript"), str):
+                        transcript_text = response.get("transcript", "")
+                    elif isinstance(response.get("text"), str):
+                        transcript_text = response.get("text", "")
+                    if is_hangup_token(transcript_text):
+                        await trigger_hangup()
+                        break
+
+                if response.get("type") == "response.done":
+                    done_text = extract_text_from_response_done(response)
+                    if is_hangup_token(done_text):
+                        await trigger_hangup()
+                        break
 
         try:
             await asyncio.gather(receive_twilio(), send_twilio())
