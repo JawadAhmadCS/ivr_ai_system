@@ -1443,6 +1443,12 @@ let restaurantsCache = [];
 let selectedId = null;
 let assignBoxOpenedByIcon = false;
 let assignBoxRestaurantId = null;
+let voiceSession = {
+  pc: null,
+  localStream: null,
+  audioEl: null,
+  active: false
+};
 
 function show(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1827,6 +1833,7 @@ function openRestaurant(id, silent) {
    
 
   `;
+  setVoiceButtonState(voiceSession.active);
   
   if (isAdmin) loadAdminsForRestaurant(r.id);
 
@@ -1938,6 +1945,32 @@ function copyTwilioUrl() {
     .catch(() => toast('Copy failed', 'error'));
 }
 
+function setVoiceButtonState(active) {
+  const btn = document.getElementById('voiceBtn');
+  if (!btn) return;
+  btn.textContent = active ? `🔴 ${t('End Voice Session')}` : `🎙️ ${t('Start Voice Session')}`;
+  btn.classList.toggle('active', !!active);
+  btn.disabled = false;
+}
+
+function stopVoice() {
+  try {
+    voiceSession.pc?.getSenders()?.forEach(sender => sender.track?.stop());
+  } catch (e) {}
+  try {
+    voiceSession.localStream?.getTracks()?.forEach(track => track.stop());
+  } catch (e) {}
+  try {
+    voiceSession.pc?.close();
+  } catch (e) {}
+  if (voiceSession.audioEl) {
+    voiceSession.audioEl.srcObject = null;
+    voiceSession.audioEl.remove();
+  }
+  voiceSession = { pc: null, localStream: null, audioEl: null, active: false };
+  setVoiceButtonState(false);
+}
+
 // ─── CHAT ────────────────────────────────────────────────────────────────────
 async function sendChat() {
   if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
@@ -1971,12 +2004,14 @@ async function sendChat() {
 
 // ─── VOICE ───────────────────────────────────────────────────────────────────
 async function startVoice() {
+  if (voiceSession.active) { stopVoice(); return; }
   if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     toast('Voice requires HTTPS', 'error'); return;
   }
   const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
   const btn = document.getElementById('voiceBtn');
+  if (btn) btn.disabled = true;
   try {
     const session = await (await apiFetch(`${API_BASE}/voice-session`, {
       method: 'POST',
@@ -1989,8 +2024,8 @@ async function startVoice() {
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     pc.ontrack = e => audioEl.srcObject = e.streams[0];
-    (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks()
-      .forEach(track => pc.addTrack(track));
+    const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -1998,11 +2033,25 @@ async function startVoice() {
       method: 'POST', body: offer.sdp,
       headers: { Authorization: `Bearer ${session.client_secret.value}`, 'Content-Type': 'application/sdp' }
     });
-    await pc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
-    btn.textContent = `🔴 ${t('End Voice Session')}`;
-    btn.classList.add('active');
+    if (!sdpRes.ok) throw new Error('sdp failed');
+    const answerSdp = await sdpRes.text();
+    if (!answerSdp) throw new Error('sdp answer missing');
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+    voiceSession = { pc, localStream, audioEl, active: true };
+    pc.onconnectionstatechange = () => {
+      if (voiceSession.pc !== pc) return;
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) stopVoice();
+    };
+    setVoiceButtonState(true);
     toast('Voice session started');
-  } catch(e) { toast('Voice session error', 'error'); }
+  } catch(e) {
+    stopVoice();
+    toast('Voice session error', 'error');
+  } finally {
+    const activeBtn = document.getElementById('voiceBtn');
+    if (activeBtn) activeBtn.disabled = false;
+  }
 }
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
