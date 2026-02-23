@@ -1350,7 +1350,7 @@ function applyRoleUI() {
   const navGlobal = document.getElementById('nav-global');
   if (navGlobal) navGlobal.style.display = isAdmin ? '' : 'none';
   const assignBox = document.getElementById('assignBox');
-  if (assignBox) assignBox.style.display = isAdmin ? 'block' : 'none';
+  if (assignBox) assignBox.style.display = (isAdmin && assignBoxOpenedByIcon) ? 'block' : 'none';
   const createBox = document.getElementById('createBox');
   if (createBox && !isAdmin) createBox.style.display = 'none';
   const createBtn = document.getElementById('createBtn');
@@ -1374,6 +1374,8 @@ async function initAfterAuth() {
 }
 let restaurantsCache = [];
 let selectedId = null;
+let assignBoxOpenedByIcon = false;
+let assignBoxRestaurantId = null;
 
 function show(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1697,9 +1699,20 @@ async function toggleRestaurant(id) {
 
 function showAssignForRestaurant(id) {
   if (!currentUser?.is_admin) return;
+  const box = document.getElementById('assignBox');
+  const isSameRestaurant = assignBoxRestaurantId === id;
+
+  if (assignBoxOpenedByIcon && isSameRestaurant) {
+    assignBoxOpenedByIcon = false;
+    assignBoxRestaurantId = null;
+    if (box) box.style.display = 'none';
+    return;
+  }
+
+  assignBoxOpenedByIcon = true;
+  assignBoxRestaurantId = id;
   const sel = document.getElementById('adminRestaurant');
   if (sel) sel.value = String(id);
-  const box = document.getElementById('assignBox');
   if (box) box.style.display = 'block';
   const email = document.getElementById('adminEmail');
   if (email) email.focus();
