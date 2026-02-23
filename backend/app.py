@@ -80,7 +80,9 @@ def load_restaurants():
 def compose_system_prompt(restaurant_prompt: str | None) -> str:
     global_prompt = load_global_prompt()
     addon = (restaurant_prompt or "").strip()
-    return f"{global_prompt}\n{addon}" if addon else global_prompt
+    hangup_rule = "Only output `<hangup>` when the user clearly asks to end/disconnect the call now. Otherwise never output `<hangup>`."
+    base = f"{global_prompt}\n{addon}" if addon else global_prompt
+    return f"{base}\n{hangup_rule}"
 
 
 def get_restaurant_prompt(restaurant_id: int | None) -> str:
