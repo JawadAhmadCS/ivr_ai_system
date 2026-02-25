@@ -23,12 +23,25 @@ from auth import ensure_admin_user, require_auth
 
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
 REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview")
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.3))
 VOICE = os.getenv("VOICE", "alloy")
+TURN_DETECTION_THRESHOLD = float(os.getenv("TURN_DETECTION_THRESHOLD", 0.3))
+TURN_DETECTION_SILENCE_MS = int(os.getenv("TURN_DETECTION_SILENCE_MS", 180))
+TURN_DETECTION_PREFIX_MS = int(os.getenv("TURN_DETECTION_PREFIX_MS", 120))
+TURN_DETECTION_CREATE_RESPONSE = _env_bool("TURN_DETECTION_CREATE_RESPONSE", True)
+TURN_DETECTION_INTERRUPT_RESPONSE = _env_bool("TURN_DETECTION_INTERRUPT_RESPONSE", True)
 LLM_HANGUP_TOKEN = (os.getenv("LLM_HANGUP_TOKEN") or "<hangup>").strip()
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
@@ -671,9 +684,11 @@ async def init_session(openai_ws, instructions: str):
                     "noise_reduction": {"type": "near_field"},
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.4,
-                        "silence_duration_ms": 300,
-                        "prefix_padding_ms": 150,
+                        "threshold": TURN_DETECTION_THRESHOLD,
+                        "silence_duration_ms": TURN_DETECTION_SILENCE_MS,
+                        "prefix_padding_ms": TURN_DETECTION_PREFIX_MS,
+                        "create_response": TURN_DETECTION_CREATE_RESPONSE,
+                        "interrupt_response": TURN_DETECTION_INTERRUPT_RESPONSE,
                     },
                 },
                 "output": {
@@ -890,14 +905,15 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if last_assistant_item and response_active:
                         print("Interrupt detected")
 
+                        if stream_sid:
+                            await websocket.send_json(
+                                {
+                                    "event": "clear",
+                                    "streamSid": stream_sid,
+                                }
+                            )
                         await openai_ws.send(json.dumps({"type": "response.cancel"}))
                         response_active = False
-                        await websocket.send_json(
-                            {
-                                "event": "clear",
-                                "streamSid": stream_sid,
-                            }
-                        )
 
         try:
             await asyncio.gather(receive_twilio(), send_twilio())
