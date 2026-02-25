@@ -857,6 +857,14 @@
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
       <span data-i18n="Restaurants">Restaurants</span>
     </button>
+    <button class="nav-btn" onclick="show('orders',this)">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        <polyline points="3.29 7 12 12 20.71 7"/>
+        <line x1="12" y1="22" x2="12" y2="12"/>
+      </svg>
+      <span data-i18n="Orders">Orders</span>
+    </button>
     <button class="nav-btn" onclick="show('logs',this)">
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span data-i18n="Call Logs">Call Logs</span>
@@ -1062,6 +1070,43 @@
     </div>
   </div>
 
+  <!-- Orders -->
+  <div id="orders" class="page">
+    <div class="page-header">
+      <div class="page-title" data-i18n="Orders">Orders</div>
+      <div class="page-subtitle" data-i18n="Structured orders captured from calls">Structured orders captured from calls</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.29 7 12 12 20.71 7"/>
+          <line x1="12" y1="22" x2="12" y2="12"/>
+        </svg>
+        <span data-i18n="All Orders">All Orders</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th data-i18n="Restaurant">Restaurant</th>
+            <th data-i18n="Customer">Customer</th>
+            <th data-i18n="Order Type">Order Type</th>
+            <th data-i18n="Address">Address</th>
+            <th data-i18n="Items">Items</th>
+            <th data-i18n="Payment">Payment</th>
+            <th data-i18n="Status">Status</th>
+            <th data-i18n="Date">Date</th>
+          </tr>
+        </thead>
+        <tbody id="orderTable">
+          <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Call Logs -->
   <div id="logs" class="page">
     <div class="page-header">
@@ -1132,7 +1177,18 @@ const TRANSLATIONS = {
     "Cancel": "Cancel",
     "Revoke Access": "Revoke Access",
     "Restore Access": "Restore Access",
-    "Loading...": "Loading..."
+    "Loading...": "Loading...",
+    "Orders": "Orders",
+    "All Orders": "All Orders",
+    "Structured orders captured from calls": "Structured orders captured from calls",
+    "Customer": "Customer",
+    "Order Type": "Order Type",
+    "Address": "Address",
+    "Items": "Items",
+    "Payment": "Payment",
+    "No orders recorded yet": "No orders recorded yet",
+    "Order captured": "Order captured",
+    "Order capture failed": "Order capture failed"
   },
   he: {
     "Platform": "פלטפורמה",
@@ -1443,10 +1499,13 @@ let restaurantsCache = [];
 let selectedId = null;
 let assignBoxOpenedByIcon = false;
 let assignBoxRestaurantId = null;
+const ORDER_JSON_MARKER = "ORDER_JSON:";
+let orderCapture = { buffer: "", markerTail: "", saved: false };
 let voiceSession = {
   pc: null,
   localStream: null,
   audioEl: null,
+  dc: null,
   active: false
 };
 
@@ -1456,6 +1515,7 @@ function show(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   if (id === 'logs') loadLogs();
+  if (id === 'orders') loadOrders();
   if (id === 'restaurants') loadRestaurants();
 }
 
@@ -1552,6 +1612,254 @@ function statusBadge(s) {
   if (sl.includes('answer') || sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
   if (sl.includes('miss') || sl.includes('fail')) return `<span class="badge badge-red">${esc(s)}</span>`;
   return `<span class="badge badge-blue">${esc(s)}</span>`;
+}
+
+function resetOrderCapture() {
+  orderCapture = { buffer: "", markerTail: "", saved: false };
+}
+
+function cleanOrderField(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value).trim();
+  if (!text) return '';
+  const lc = text.toLowerCase();
+  if (['none','null','n/a','na','unknown'].includes(lc)) return '';
+  return text;
+}
+
+function firstOrderValue(obj, keys) {
+  for (const k of keys) {
+    if (obj && Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+  }
+  return null;
+}
+
+function normalizeOrderPayloadClient(data) {
+  if (!data || typeof data !== 'object') {
+    return { data: {}, missing: ['order_type','full_name','ordered_items','payment_method'] };
+  }
+  const orderRaw = cleanOrderField(firstOrderValue(data, ['order_type','orderType','type','order']));
+  let orderType = orderRaw.toLowerCase();
+  if (orderType.includes('deliver')) orderType = 'delivery';
+  else if (orderType.includes('pick') || orderType.includes('take')) orderType = 'pickup';
+
+  const payRaw = cleanOrderField(firstOrderValue(data, ['payment_method','paymentMethod','payment','payment_type']));
+  let paymentMethod = payRaw.toLowerCase();
+  if (paymentMethod.includes('card') || paymentMethod.includes('credit') || paymentMethod.includes('debit')) paymentMethod = 'card';
+  else if (paymentMethod.includes('cash')) paymentMethod = 'cash';
+
+  const fullName = cleanOrderField(firstOrderValue(data, ['full_name','fullName','name','customer_name','customerName']));
+  const address = cleanOrderField(firstOrderValue(data, ['address','street','street_address','streetAddress']));
+  const houseNumber = cleanOrderField(firstOrderValue(data, ['house_number','houseNo','house_no','house','apt','apartment']));
+  const itemsValue = firstOrderValue(data, ['ordered_items','items','order_items','items_list','orderItems']);
+  let orderedItems = '';
+  if (Array.isArray(itemsValue)) {
+    const parts = [];
+    itemsValue.forEach(v => {
+      if (v && typeof v === 'object') {
+        const name = v.name || v.item || v.title;
+        const qty = v.qty || v.quantity;
+        if (name && qty) parts.push(`${name} x${qty}`);
+        else if (name) parts.push(String(name));
+        else parts.push(String(v));
+      } else {
+        const cleaned = cleanOrderField(v);
+        if (cleaned) parts.push(cleaned);
+      }
+    });
+    orderedItems = parts.join(', ');
+  } else {
+    orderedItems = cleanOrderField(itemsValue);
+  }
+
+  const missing = [];
+  if (!['delivery','pickup'].includes(orderType)) missing.push('order_type');
+  if (!fullName) missing.push('full_name');
+  if (!orderedItems) missing.push('ordered_items');
+  if (!['card','cash'].includes(paymentMethod)) missing.push('payment_method');
+  if (orderType === 'delivery') {
+    if (!address) missing.push('address');
+    if (!houseNumber) missing.push('house_number');
+  }
+
+  return {
+    data: {
+      order_type: orderType,
+      full_name: fullName,
+      address,
+      house_number: houseNumber,
+      ordered_items: orderedItems,
+      payment_method: paymentMethod
+    },
+    missing
+  };
+}
+
+function extractTextCandidates(evt) {
+  if (!evt || typeof evt !== 'object') return [];
+  const type = String(evt.type || '');
+  if (type === 'response.output_audio.delta') return [];
+  const texts = [];
+  ['delta','text','transcript'].forEach(k => {
+    const v = evt[k];
+    if (typeof v === 'string' && v) texts.push(v);
+  });
+  ['item','response'].forEach(k => {
+    const nested = evt[k];
+    if (!nested || typeof nested !== 'object') return;
+    ['text','transcript'].forEach(nk => {
+      const v = nested[nk];
+      if (typeof v === 'string' && v) texts.push(v);
+    });
+    const content = nested.content;
+    if (Array.isArray(content)) {
+      content.forEach(part => {
+        if (!part || typeof part !== 'object') return;
+        ['text','transcript'].forEach(ck => {
+          const v = part[ck];
+          if (typeof v === 'string' && v) texts.push(v);
+        });
+      });
+    }
+  });
+  return texts;
+}
+
+function parseOrderJsonFromBuffer(buffer) {
+  if (!buffer) return null;
+  const markerIdx = buffer.indexOf(ORDER_JSON_MARKER);
+  if (markerIdx < 0) return null;
+  let tail = buffer.slice(markerIdx + ORDER_JSON_MARKER.length).trimStart();
+  if (tail.startsWith('```')) {
+    const fenceEnd = tail.indexOf('\n');
+    if (fenceEnd !== -1) tail = tail.slice(fenceEnd + 1);
+  }
+  const start = tail.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < tail.length; i++) {
+    const ch = tail[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  if (end < 0) return null;
+  const jsonStr = tail.slice(start, end + 1);
+  try {
+    const data = JSON.parse(jsonStr);
+    if (!data || typeof data !== 'object') return null;
+    return { raw: jsonStr, data };
+  } catch {
+    return null;
+  }
+}
+
+async function ingestOrder(data, raw) {
+  if (!selectedId) return;
+  const payload = {
+    restaurant_id: selectedId,
+    order_type: data.order_type,
+    full_name: data.full_name,
+    address: data.address,
+    house_number: data.house_number,
+    ordered_items: data.ordered_items,
+    payment_method: data.payment_method,
+    raw_json: raw
+  };
+  const res = await apiFetch(`${API_BASE}/orders/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.warn('Order ingest failed', err);
+    throw new Error(err.detail || 'order save failed');
+  }
+}
+
+function handleRealtimeEventMessage(data) {
+  if (orderCapture.saved) return;
+  let evt;
+  try {
+    evt = JSON.parse(data);
+  } catch {
+    return;
+  }
+  const texts = extractTextCandidates(evt);
+  for (const text of texts) {
+    if (!text) continue;
+    if (orderCapture.buffer) {
+      orderCapture.buffer += text;
+    } else {
+      const combined = orderCapture.markerTail + text;
+      if (!combined.includes(ORDER_JSON_MARKER)) {
+        orderCapture.markerTail = combined.slice(-(ORDER_JSON_MARKER.length - 1));
+        continue;
+      }
+      const idx = combined.indexOf(ORDER_JSON_MARKER);
+      orderCapture.buffer = combined.slice(idx);
+    }
+    if (orderCapture.buffer.length > 10000) {
+      orderCapture.buffer = orderCapture.buffer.slice(-10000);
+    }
+    const parsed = parseOrderJsonFromBuffer(orderCapture.buffer);
+    if (!parsed) continue;
+    const normalized = normalizeOrderPayloadClient(parsed.data);
+    if (normalized.missing.length) {
+      console.warn('Order JSON missing fields', normalized.missing, parsed.data);
+      orderCapture.buffer = '';
+      orderCapture.markerTail = '';
+      continue;
+    }
+    ingestOrder(normalized.data, parsed.raw)
+      .then(() => {
+        orderCapture.saved = true;
+        toast('Order captured');
+        if (document.getElementById('orders')?.classList.contains('active')) {
+          loadOrders();
+        }
+      })
+      .catch(() => toast('Order capture failed', 'error'));
+    break;
+  }
+}
+
+function orderStatusBadge(s) {
+  if (!s) return `<span class="badge badge-amber">${t('Unknown')}</span>`;
+  const sl = s.toLowerCase();
+  if (sl.includes('incomplete')) return `<span class="badge badge-amber">${esc(s)}</span>`;
+  if (sl.includes('complete')) return `<span class="badge badge-green">${esc(s)}</span>`;
+  return `<span class="badge badge-blue">${esc(s)}</span>`;
+}
+
+async function loadOrders() {
+  try {
+    const orders = await (await apiFetch(`${API_BASE}/orders/`)).json();
+    const tbody = document.getElementById('orderTable');
+    if (!orders.length) {
+      tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = orders.map(o => {
+      const addr = [o.address, o.house_number].filter(Boolean).join(', ');
+      return `
+        <tr>
+          <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${o.id}</td>
+          <td>${esc(o.restaurant)}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(o.full_name)}</td>
+          <td>${esc(o.order_type)}</td>
+          <td style="max-width:240px">${esc(addr)}</td>
+          <td style="max-width:260px">${esc(o.ordered_items)}</td>
+          <td>${esc(o.payment_method)}</td>
+          <td>${orderStatusBadge(o.status)}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(o.created)}</td>
+        </tr>`;
+    }).join('');
+  } catch(e) {}
 }
 
 async function loadLogs() {
@@ -1972,13 +2280,17 @@ function stopVoice() {
     voiceSession.localStream?.getTracks()?.forEach(track => track.stop());
   } catch (e) {}
   try {
+    voiceSession.dc?.close();
+  } catch (e) {}
+  try {
     voiceSession.pc?.close();
   } catch (e) {}
   if (voiceSession.audioEl) {
     voiceSession.audioEl.srcObject = null;
     voiceSession.audioEl.remove();
   }
-  voiceSession = { pc: null, localStream: null, audioEl: null, active: false };
+  voiceSession = { pc: null, localStream: null, audioEl: null, dc: null, active: false };
+  resetOrderCapture();
   setVoiceButtonState(false);
 }
 
@@ -2020,6 +2332,7 @@ async function startVoice() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     toast('Voice requires HTTPS', 'error'); return;
   }
+  resetOrderCapture();
   const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
   const btn = document.getElementById('voiceBtn');
   if (btn) btn.disabled = true;
@@ -2032,6 +2345,16 @@ async function startVoice() {
     if (!session.client_secret?.value) { toast('Voice session error', 'error'); return; }
 
     const pc = new RTCPeerConnection();
+    const dc = pc.createDataChannel('oai-events');
+    dc.onmessage = e => handleRealtimeEventMessage(e.data);
+    dc.onopen = () => {
+      try {
+        dc.send(JSON.stringify({
+          type: 'session.update',
+          session: { output_modalities: ['audio', 'text'] }
+        }));
+      } catch (e) {}
+    };
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     pc.ontrack = e => audioEl.srcObject = e.streams[0];
@@ -2049,7 +2372,7 @@ async function startVoice() {
     if (!answerSdp) throw new Error('sdp answer missing');
     await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
-    voiceSession = { pc, localStream, audioEl, active: true };
+    voiceSession = { pc, localStream, audioEl, dc, active: true };
     pc.onconnectionstatechange = () => {
       if (voiceSession.pc !== pc) return;
       if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) stopVoice();

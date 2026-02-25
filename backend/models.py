@@ -22,6 +22,24 @@ class CallLog(Base):
     created = Column(DateTime, default=datetime.utcnow)
 
 
+class Order(Base):
+    __tablename__ = "orders"
+    id = Column(Integer, primary_key=True)
+    restaurant_id = Column(Integer, index=True, nullable=True)
+    restaurant = Column(String(200))
+    caller = Column(String(50))
+    call_sid = Column(String(100))
+    order_type = Column(String(50))
+    full_name = Column(String(200))
+    address = Column(String(300))
+    house_number = Column(String(50))
+    ordered_items = Column(Text)
+    payment_method = Column(String(50))
+    status = Column(String(50), default="completed")
+    raw_json = Column(Text)
+    created = Column(DateTime, default=datetime.utcnow)
+
+
 class GlobalPrompt(Base):
     __tablename__ = "global_prompts"
     id = Column(Integer, primary_key=True)

@@ -18,7 +18,7 @@ from twilio.twiml.voice_response import VoiceResponse, Connect, Hangup
 
 from database import engine, SessionLocal, ensure_schema
 import models
-from routes import restaurant, call_logs, dashboard, prompt, auth as auth_routes
+from routes import restaurant, call_logs, dashboard, prompt, orders, auth as auth_routes
 from auth import ensure_admin_user, require_auth
 
 load_dotenv()
@@ -32,6 +32,18 @@ VOICE = os.getenv("VOICE", "alloy")
 LLM_HANGUP_TOKEN = (os.getenv("LLM_HANGUP_TOKEN") or "<hangup>").strip()
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+ORDER_JSON_MARKER = "ORDER_JSON:"
+ORDER_TYPE_VALUES = {"delivery", "pickup"}
+PAYMENT_METHOD_VALUES = {"card", "cash"}
+ORDER_CAPTURE_RULES = (
+    "Order capture requirements:\n"
+    "- Collect order_type (delivery or pickup), full_name, ordered_items, and payment_method (card or cash).\n"
+    "- If order_type is delivery, also collect address and house_number.\n"
+    "- Do not complete the order until all required fields are provided.\n"
+    "- When complete, output a single-line JSON object prefixed with ORDER_JSON: using ONLY these keys:\n"
+    '  order_type, full_name, address, house_number, ordered_items, payment_method.\n'
+    "- Use valid JSON with double quotes. Do not read the JSON aloud to the caller."
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPT_DIR = BASE_DIR / "prompts"
@@ -54,6 +66,7 @@ ensure_schema()
 app.include_router(auth_routes.router)
 app.include_router(restaurant.router, dependencies=[Depends(require_auth)])
 app.include_router(call_logs.router, dependencies=[Depends(require_auth)])
+app.include_router(orders.router, dependencies=[Depends(require_auth)])
 app.include_router(dashboard.router, dependencies=[Depends(require_auth)])
 app.include_router(prompt.router, dependencies=[Depends(require_auth)])
 
@@ -82,7 +95,7 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     addon = (restaurant_prompt or "").strip()
     hangup_rule = "Only output `<hangup>` when the user clearly asks to end/disconnect the call now. Otherwise never output `<hangup>`."
     base = f"{global_prompt}\n{addon}" if addon else global_prompt
-    return f"{base}\n{hangup_rule}"
+    return f"{base}\n{hangup_rule}\n{ORDER_CAPTURE_RULES}"
 
 
 def get_restaurant_prompt(restaurant_id: int | None) -> str:
@@ -213,6 +226,172 @@ def contains_hangup_token(response: dict, token: str) -> bool:
         if marker in text.lower():
             return True
     return False
+
+
+def _clean_field(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"", "none", "null", "n/a", "na", "unknown"}:
+        return ""
+    return text
+
+
+def _first_value(data: dict, keys: list[str]):
+    for key in keys:
+        if key in data:
+            return data.get(key)
+    return None
+
+
+def normalize_order_payload(data: dict) -> tuple[dict, list[str]]:
+    if not isinstance(data, dict):
+        return {}, ["order_type", "full_name", "ordered_items", "payment_method"]
+
+    order_type_raw = _clean_field(
+        _first_value(data, ["order_type", "orderType", "type", "orderType", "order"])
+    ).lower()
+    if "deliver" in order_type_raw:
+        order_type = "delivery"
+    elif "pick" in order_type_raw or "take" in order_type_raw:
+        order_type = "pickup"
+    else:
+        order_type = order_type_raw
+
+    payment_raw = _clean_field(
+        _first_value(data, ["payment_method", "paymentMethod", "payment", "payment_type"])
+    ).lower()
+    if "card" in payment_raw or "credit" in payment_raw or "debit" in payment_raw:
+        payment_method = "card"
+    elif "cash" in payment_raw:
+        payment_method = "cash"
+    else:
+        payment_method = payment_raw
+
+    full_name = _clean_field(
+        _first_value(data, ["full_name", "fullName", "name", "customer_name", "customerName"])
+    )
+    address = _clean_field(_first_value(data, ["address", "street", "street_address", "streetAddress"]))
+    house_number = _clean_field(
+        _first_value(data, ["house_number", "houseNo", "house_no", "house", "apt", "apartment"])
+    )
+
+    items_value = _first_value(data, ["ordered_items", "items", "order_items", "items_list", "orderItems"])
+    if isinstance(items_value, list):
+        parts = []
+        for v in items_value:
+            if isinstance(v, dict):
+                name = v.get("name") or v.get("item") or v.get("title")
+                qty = v.get("qty") or v.get("quantity")
+                if name and qty:
+                    parts.append(f"{name} x{qty}")
+                elif name:
+                    parts.append(str(name))
+                else:
+                    parts.append(str(v))
+            else:
+                cleaned = _clean_field(v)
+                if cleaned:
+                    parts.append(cleaned)
+        ordered_items = ", ".join(p for p in parts if p)
+    else:
+        ordered_items = _clean_field(items_value)
+
+    missing = []
+    if order_type not in ORDER_TYPE_VALUES:
+        missing.append("order_type")
+    if not full_name:
+        missing.append("full_name")
+    if not ordered_items:
+        missing.append("ordered_items")
+    if payment_method not in PAYMENT_METHOD_VALUES:
+        missing.append("payment_method")
+    if order_type == "delivery":
+        if not address:
+            missing.append("address")
+        if not house_number:
+            missing.append("house_number")
+
+    normalized = {
+        "order_type": order_type,
+        "full_name": full_name,
+        "address": address,
+        "house_number": house_number,
+        "ordered_items": ordered_items,
+        "payment_method": payment_method,
+    }
+    return normalized, missing
+
+
+def parse_order_json_from_buffer(buffer: str) -> tuple[str, dict] | None:
+    if not buffer:
+        return None
+    marker_idx = buffer.find(ORDER_JSON_MARKER)
+    if marker_idx < 0:
+        return None
+
+    tail = buffer[marker_idx + len(ORDER_JSON_MARKER):].lstrip(" \n\t:")
+    if tail.startswith("```"):
+        fence_end = tail.find("\n")
+        if fence_end != -1:
+            tail = tail[fence_end + 1:]
+    start = tail.find("{")
+    if start < 0:
+        return None
+
+    depth = 0
+    end = None
+    for i in range(start, len(tail)):
+        ch = tail[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+
+    if end is None:
+        return None
+
+    json_str = tail[start : end + 1]
+    try:
+        data = json.loads(json_str)
+    except ValueError:
+        return None
+    return json_str, data
+
+
+def save_order(
+    restaurant_id: int | None,
+    restaurant_name: str,
+    caller: str,
+    call_sid: str,
+    normalized: dict,
+    raw_json: str,
+    status: str = "completed",
+):
+    db = SessionLocal()
+    try:
+        db.add(
+            models.Order(
+                restaurant_id=restaurant_id,
+                restaurant=restaurant_name,
+                caller=caller,
+                call_sid=call_sid,
+                order_type=normalized.get("order_type"),
+                full_name=normalized.get("full_name"),
+                address=normalized.get("address"),
+                house_number=normalized.get("house_number"),
+                ordered_items=normalized.get("ordered_items"),
+                payment_method=normalized.get("payment_method"),
+                status=status,
+                raw_json=raw_json,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 def check_openai_connectivity():
@@ -362,6 +541,62 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
     return {"reply": reply}
 
 
+@app.post("/orders/ingest")
+async def ingest_order(data: dict, user=Depends(require_auth)):
+    try:
+        restaurant_id = data.get("restaurant_id")
+        if not user.is_admin:
+            if not user.restaurant_id:
+                raise HTTPException(status_code=403, detail="Forbidden")
+            restaurant_id = user.restaurant_id
+        if restaurant_id is not None:
+            try:
+                restaurant_id = int(restaurant_id)
+            except (TypeError, ValueError):
+                restaurant_id = None
+
+        normalized, missing = normalize_order_payload(data)
+        if missing:
+            print(f"[ORDER] ingest missing fields: {missing} | keys={list(data.keys())}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required fields: {', '.join(missing)}",
+            )
+
+        restaurant_name = get_restaurant_name(restaurant_id)
+        caller = str(data.get("caller") or "web")
+        call_sid = str(data.get("call_sid") or "")
+        raw_json = data.get("raw_json")
+        if not isinstance(raw_json, str) or not raw_json.strip():
+            raw_json = json.dumps(
+                {
+                    "order_type": normalized.get("order_type"),
+                    "full_name": normalized.get("full_name"),
+                    "address": normalized.get("address"),
+                    "house_number": normalized.get("house_number"),
+                    "ordered_items": normalized.get("ordered_items"),
+                    "payment_method": normalized.get("payment_method"),
+                }
+            )
+
+        save_order(
+            restaurant_id=restaurant_id,
+            restaurant_name=restaurant_name,
+            caller=caller,
+            call_sid=call_sid,
+            normalized=normalized,
+            raw_json=raw_json,
+            status="completed",
+        )
+        print(f"[ORDER] Web order saved for {restaurant_name} ({caller})")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ORDER] ingest failed: {e}")
+        raise HTTPException(status_code=500, detail="order ingest failed")
+
+
 @app.api_route("/voice-session", methods=["GET", "POST"])
 def create_voice_session(request: Request, data: dict | None = None, user=Depends(require_auth)):
     try:
@@ -390,11 +625,6 @@ def create_voice_session(request: Request, data: dict | None = None, user=Depend
             "model": REALTIME_MODEL,
             "voice": VOICE,
             "instructions": final_prompt,
-            "audio": {
-                "input": {
-                    "noise_reduction": {"type": "near_field"},
-                }
-            },
         }
 
         r = requests.post(url, headers=headers, json=payload)
@@ -434,7 +664,7 @@ async def init_session(openai_ws, instructions: str):
             "type": "realtime",
             "model": REALTIME_MODEL,
             "instructions": instructions,
-            "output_modalities": ["audio"],
+            "output_modalities": ["audio", "text"],
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
@@ -461,7 +691,7 @@ async def init_session(openai_ws, instructions: str):
             {
                 "type": "response.create",
                 "response": {
-                    "output_modalities": ["audio"],
+                    "output_modalities": ["audio", "text"],
                 },
             }
         )
@@ -490,6 +720,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
         start_ts = None
         logged = False
         call_already_ending = False
+        order_buffer = ""
+        order_saved = False
+        marker_tail = ""
 
         def log_call():
             nonlocal logged
@@ -557,9 +790,52 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
         async def send_twilio():
             nonlocal last_assistant_item
+            nonlocal order_buffer
+            nonlocal order_saved
+            nonlocal marker_tail
 
             async for msg in openai_ws:
                 response = json.loads(msg)
+
+                if not order_saved:
+                    text_candidates = extract_text_candidates(response)
+                    for text in text_candidates:
+                        if order_buffer:
+                            order_buffer += text
+                        else:
+                            combined = marker_tail + text
+                            if ORDER_JSON_MARKER not in combined:
+                                marker_tail = combined[-(len(ORDER_JSON_MARKER) - 1):]
+                                continue
+                            idx = combined.find(ORDER_JSON_MARKER)
+                            order_buffer = combined[idx:]
+                        if len(order_buffer) > 10000:
+                            order_buffer = order_buffer[-10000:]
+                        parsed = parse_order_json_from_buffer(order_buffer)
+                        if not parsed:
+                            continue
+                        raw_json, data = parsed
+                        normalized, missing = normalize_order_payload(data)
+                        if missing:
+                            print(f"[ORDER] Incomplete order JSON; missing: {missing}")
+                            order_buffer = ""
+                            marker_tail = ""
+                            continue
+                        try:
+                            save_order(
+                                restaurant_id=restaurant_id,
+                                restaurant_name=restaurant_name,
+                                caller=caller,
+                                call_sid=call_sid,
+                                normalized=normalized,
+                                raw_json=raw_json,
+                                status="completed",
+                            )
+                            order_saved = True
+                            print(f"[ORDER] Order saved for {restaurant_name} ({call_sid or 'no call sid'})")
+                        except Exception as e:
+                            print(f"[ORDER] Failed to save order: {e}")
+                        break
 
                 if contains_hangup_token(response, LLM_HANGUP_TOKEN):
                     await openai_ws.send(json.dumps({"type": "response.cancel"}))
