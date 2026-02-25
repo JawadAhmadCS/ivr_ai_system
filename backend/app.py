@@ -390,6 +390,11 @@ def create_voice_session(request: Request, data: dict | None = None, user=Depend
             "model": REALTIME_MODEL,
             "voice": VOICE,
             "instructions": final_prompt,
+            "audio": {
+                "input": {
+                    "noise_reduction": {"type": "near_field"},
+                }
+            },
         }
 
         r = requests.post(url, headers=headers, json=payload)
@@ -433,6 +438,7 @@ async def init_session(openai_ws, instructions: str):
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
+                    "noise_reduction": {"type": "near_field"},
                     "turn_detection": {
                         "type": "server_vad",
                         "threshold": 0.4,
