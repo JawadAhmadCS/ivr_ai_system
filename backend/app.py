@@ -717,6 +717,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
         stream_sid = None
         last_assistant_item = None
+        response_active = False
         start_ts = None
         logged = False
         call_already_ending = False
@@ -790,17 +791,30 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
         async def send_twilio():
             nonlocal last_assistant_item
+            nonlocal response_active
             nonlocal order_buffer
             nonlocal order_saved
             nonlocal marker_tail
 
             async for msg in openai_ws:
                 response = json.loads(msg)
-                if response.get("type") == "error":
+                event_type = response.get("type")
+
+                if event_type == "response.created":
+                    response_active = True
+                elif event_type == "response.done":
+                    response_active = False
+                    last_assistant_item = None
+
+                if event_type == "error":
                     err = response.get("error") if isinstance(response.get("error"), dict) else {}
+                    code = err.get("code", "unknown")
+                    message = err.get("message", "unknown error")
+                    if code == "response_cancel_not_active":
+                        # Benign race when user starts speaking after assistant already ended output.
+                        continue
                     print(
-                        f"[OPENAI][realtime][error] {err.get('code', 'unknown')}: "
-                        f"{err.get('message', 'unknown error')}"
+                        f"[OPENAI][realtime][error] {code}: {message}"
                     )
                     continue
 
@@ -845,7 +859,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         break
 
                 if contains_hangup_token(response, LLM_HANGUP_TOKEN):
-                    await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                    if response_active:
+                        await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                        response_active = False
                     if stream_sid:
                         await websocket.send_json(
                             {
@@ -856,7 +872,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     await end_call_from_assistant()
                     break
 
-                if response.get("type") in {"response.output_audio.delta", "response.audio.delta"}:
+                if event_type in {"response.output_audio.delta", "response.audio.delta"}:
                     audio = response["delta"]
                     await websocket.send_json(
                         {
@@ -868,12 +884,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
                     if response.get("item_id"):
                         last_assistant_item = response["item_id"]
+                        response_active = True
 
-                if response.get("type") == "input_audio_buffer.speech_started":
-                    if last_assistant_item:
+                if event_type == "input_audio_buffer.speech_started":
+                    if last_assistant_item and response_active:
                         print("Interrupt detected")
 
                         await openai_ws.send(json.dumps({"type": "response.cancel"}))
+                        response_active = False
                         await websocket.send_json(
                             {
                                 "event": "clear",
