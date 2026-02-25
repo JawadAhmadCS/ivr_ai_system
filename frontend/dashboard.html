@@ -2351,7 +2351,7 @@ async function startVoice() {
       try {
         dc.send(JSON.stringify({
           type: 'session.update',
-          session: { output_modalities: ['audio', 'text'] }
+          session: { output_modalities: ['audio'] }
         }));
       } catch (e) {}
     };
@@ -2363,7 +2363,8 @@ async function startVoice() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+    const realtimeModel = session.model || 'gpt-4o-realtime-preview';
+    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(realtimeModel)}`, {
       method: 'POST', body: offer.sdp,
       headers: { Authorization: `Bearer ${session.client_secret.value}`, 'Content-Type': 'application/sdp' }
     });

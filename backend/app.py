@@ -26,7 +26,7 @@ load_dotenv()
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 5050))
-REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
+REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview")
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.3))
 VOICE = os.getenv("VOICE", "alloy")
 LLM_HANGUP_TOKEN = (os.getenv("LLM_HANGUP_TOKEN") or "<hangup>").strip()
@@ -664,7 +664,7 @@ async def init_session(openai_ws, instructions: str):
             "type": "realtime",
             "model": REALTIME_MODEL,
             "instructions": instructions,
-            "output_modalities": ["audio", "text"],
+            "output_modalities": ["audio"],
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcmu"},
@@ -691,7 +691,7 @@ async def init_session(openai_ws, instructions: str):
             {
                 "type": "response.create",
                 "response": {
-                    "output_modalities": ["audio", "text"],
+                    "output_modalities": ["audio"],
                 },
             }
         )
@@ -796,6 +796,13 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
             async for msg in openai_ws:
                 response = json.loads(msg)
+                if response.get("type") == "error":
+                    err = response.get("error") if isinstance(response.get("error"), dict) else {}
+                    print(
+                        f"[OPENAI][realtime][error] {err.get('code', 'unknown')}: "
+                        f"{err.get('message', 'unknown error')}"
+                    )
+                    continue
 
                 if not order_saved:
                     text_candidates = extract_text_candidates(response)
@@ -849,7 +856,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     await end_call_from_assistant()
                     break
 
-                if response.get("type") == "response.output_audio.delta":
+                if response.get("type") in {"response.output_audio.delta", "response.audio.delta"}:
                     audio = response["delta"]
                     await websocket.send_json(
                         {
