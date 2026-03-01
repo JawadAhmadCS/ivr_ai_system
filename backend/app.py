@@ -536,10 +536,10 @@ async def get_recording_file(filename: str):
 
 
 # ── Twilio webhook ─────────────────────────────────────────────────────────────
-@app.api_route("/incoming-call",                     methods=["GET", "POST"])
-@app.api_route("/incoming-call/{restaurant_id}",     methods=["GET", "POST"])
-@app.api_route("/api/incoming-call",                 methods=["GET", "POST"])
-@app.api_route("/api/incoming-call/{restaurant_id}", methods=["GET", "POST"])
+@app.api_route("/incoming-call",                     methods=["POST"])
+@app.api_route("/incoming-call/{restaurant_id}",     methods=["POST"])
+@app.api_route("/api/incoming-call",                 methods=["POST"])
+@app.api_route("/api/incoming-call/{restaurant_id}", methods=["POST"])
 async def incoming_call(request: Request, restaurant_id: int | None = None):
     p = dict(request.query_params)
     if request.method == "POST":

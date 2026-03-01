@@ -4,870 +4,949 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VoiceIQ — Restaurant IVR Platform</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #080c14;
-    --surface: #0d1220;
-    --surface2: #111827;
-    --border: #1e2d45;
-    --accent: #0ea5e9;
-    --accent2: #38bdf8;
-    --accent-glow: rgba(14,165,233,0.15);
-    --green: #10b981;
-    --red: #f43f5e;
-    --amber: #f59e0b;
-    --text: #f0f6ff;
-    --muted: #64748b;
-    --subtle: #1e293b;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --sidebar-w: 220px;
-    --sidebar-w-collapsed: 72px;
-  }
-
-  * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-    direction: ltr;
-  }
-
-  /* RTL body override */
-  body[dir="rtl"] {
-    font-family: 'DM Sans', 'Segoe UI', Arial, sans-serif;
-  }
-
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(14,165,233,0.08) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(56,189,248,0.05) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* ── SIDEBAR ── */
-  .sidebar {
-    position: fixed;
-    top: 0; bottom: 0;
-    left: 0;
-    right: auto;
-    width: var(--sidebar-w);
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    z-index: 100;
-    transition: width 0.2s ease;
-  }
-
-  .logo {
-    padding: 24px 20px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .sidebar-toggle {
-    margin-inline-start: auto;
-    width: 32px;
-    height: 32px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.18s;
-  }
-
-  .sidebar-toggle:hover {
-    background: var(--subtle);
-    color: var(--text);
-    border-color: #2a3f5f;
-  }
-
-  .logo-icon {
-    width: 34px; height: 34px;
-    background: linear-gradient(135deg, var(--accent), #0284c7);
-    border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-    box-shadow: 0 0 20px rgba(14,165,233,0.3);
-    flex-shrink: 0;
-  }
-
-  .logo-text {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 18px;
-    letter-spacing: -0.5px;
-    color: var(--text);
-  }
-
-  .logo-text span { color: var(--accent); }
-
-  .nav {
-    padding: 16px 12px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    overflow-y: auto;
-  }
-
-  .nav-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 12px 8px 6px;
-    text-align: start;
-  }
-
-  .nav-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 12px;
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--muted);
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 400;
-    transition: all 0.18s;
-    text-align: start;
-  }
-
-  .nav-btn:hover { background: var(--subtle); color: var(--text); }
-
-  .nav-btn.active {
-    background: var(--accent-glow);
-    color: var(--accent2);
-    border-color: rgba(14,165,233,0.25);
-  }
-
-  .nav-btn .icon {
-    width: 18px; height: 18px;
-    opacity: 0.7;
-    flex-shrink: 0;
-  }
-
-  .nav-btn.active .icon { opacity: 1; }
-
-  .sidebar-footer {
-    padding: 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: rgba(16,185,129,0.08);
-    border: 1px solid rgba(16,185,129,0.2);
-    border-radius: 20px;
-    font-size: 12px;
-    color: var(--green);
-    font-family: 'DM Mono', monospace;
-  }
-
-  .status-dot {
-    width: 7px; height: 7px;
-    background: var(--green);
-    border-radius: 50%;
-    box-shadow: 0 0 8px var(--green);
-    animation: pulse 2s infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-  /* ── MAIN ── */
-  .main {
-    margin-left: var(--sidebar-w);
-    margin-right: 0;
-    padding: 32px;
-    min-height: 100vh;
-    position: relative;
-    z-index: 1;
-    transition: margin-left 0.2s ease;
-  }
-
-  body.sidebar-collapsed .sidebar { width: var(--sidebar-w-collapsed); }
-  body.sidebar-collapsed .main { margin-left: var(--sidebar-w-collapsed); }
-  body.sidebar-collapsed .logo {
-    padding: 14px 10px;
-    justify-content: center;
-    gap: 8px;
-  }
-  body.sidebar-collapsed .logo-text,
-  body.sidebar-collapsed .nav-label,
-  body.sidebar-collapsed .status-pill span {
-    display: none;
-  }
-  body.sidebar-collapsed .sidebar-toggle { margin-inline-start: 0; }
-  body.sidebar-collapsed .nav {
-    padding: 12px 8px;
-  }
-  body.sidebar-collapsed .nav-btn {
-    justify-content: center;
-    padding: 10px 8px;
-    gap: 0;
-  }
-  body.sidebar-collapsed .nav-btn > span { display: none; }
-  body.sidebar-collapsed .sidebar-footer { padding: 10px 8px; }
-  body.sidebar-collapsed .status-pill {
-    justify-content: center;
-    padding: 8px;
-  }
-  body.sidebar-collapsed .sidebar-footer .btn {
-    font-size: 0;
-    justify-content: center;
-    width: 100%;
-    min-height: 34px;
-    padding: 8px;
-  }
-  body.sidebar-collapsed .sidebar-footer .btn::before {
-    content: '⎋';
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  .page { display: none; animation: fadeIn 0.25s ease; }
-  .page.active { display: block; }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  /* ── PAGE HEADER ── */
-  .page-header { margin-bottom: 28px; }
-
-  .page-title {
-    font-family: 'Syne', sans-serif;
-    font-weight: 700;
-    font-size: 26px;
-    letter-spacing: -0.5px;
-  }
-
-  .page-subtitle { color: var(--muted); font-size: 14px; margin-top: 4px; }
-
-  /* ── CARDS ── */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 20px;
-    transition: border-color 0.2s;
-  }
-
-  .card:hover { border-color: #2a3f5f; }
-
-  .card-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 15px;
-    font-weight: 700;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .card-title svg { color: var(--accent); flex-shrink: 0; }
-
-  /* ── STATS ── */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 22px;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.2s;
-  }
-
-  .stat-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(14,165,233,0.1);
-  }
-
-  .stat-card::after {
-    content: '';
-    position: absolute;
-    top: 0; inset-inline-start: 0; inset-inline-end: 0;
-    height: 2px;
-    background: linear-gradient(to inline-end, var(--accent), transparent);
-  }
-
-  /* Fix for RTL gradient direction */
-  [dir="rtl"] .stat-card::after {
-    background: linear-gradient(to left, var(--accent), transparent);
-  }
-  [dir="ltr"] .stat-card::after {
-    background: linear-gradient(to right, var(--accent), transparent);
-  }
-
-  .stat-label {
-    font-size: 11px;
-    font-family: 'DM Mono', monospace;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
-  }
-
-  .stat-value {
-    font-family: 'Syne', sans-serif;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1;
-  }
-
-  .stat-icon {
-    position: absolute;
-    top: 18px; inset-inline-end: 18px;
-    width: 34px; height: 34px;
-    background: var(--accent-glow);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-    border: 1px solid rgba(14,165,233,0.15);
-  }
-
-  /* ── FORMS ── */
-  .form-group { margin-bottom: 16px; }
-
-  .form-label {
-    display: block;
-    font-size: 12px;
-    font-family: 'DM Mono', monospace;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 6px;
-  }
-
-  input, textarea, select {
-    width: 100%;
-    padding: 11px 14px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    text-align: start;
-    direction: inherit;
-  }
-
-  input:focus, textarea:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
-  }
-
-  input::placeholder, textarea::placeholder { color: var(--muted); }
-
-  textarea { resize: vertical; min-height: 110px; line-height: 1.6; }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  /* ── BUTTONS ── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 10px 18px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.18s;
-    white-space: nowrap;
-  }
-
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 0 20px rgba(14,165,233,0.25);
-    border-color: var(--accent);
-  }
-
-  .btn-primary:hover {
-    background: var(--accent2);
-    box-shadow: 0 0 28px rgba(14,165,233,0.4);
-    transform: translateY(-1px);
-  }
-
-  .btn-secondary {
-    background: var(--subtle);
-    color: var(--text);
-    border-color: var(--border);
-  }
-
-  .btn-secondary:hover { background: var(--surface2); border-color: #2a3f5f; }
-
-  .btn-danger {
-    background: rgba(244,63,94,0.12);
-    color: var(--red);
-    border-color: rgba(244,63,94,0.25);
-  }
-
-  .btn-danger:hover { background: rgba(244,63,94,0.22); border-color: var(--red); }
-
-  .btn-ghost {
-    background: transparent;
-    color: var(--muted);
-  }
-
-  .btn-ghost:hover { background: var(--subtle); color: var(--text); border-color: var(--border); }
-
-  .btn-sm { padding: 7px 13px; font-size: 13px; }
-
-  .btn-success {
-    background: rgba(16,185,129,0.12);
-    color: var(--green);
-    border-color: rgba(16,185,129,0.25);
-  }
-
-  .btn-success:hover { background: rgba(16,185,129,0.2); }
-
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-
-  /* ── SPLIT LAYOUT ── */
-  .split-layout {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    gap: 20px;
-    align-items: start;
-  }
-
-  /* ── RESTAURANT LIST ── */
-  .restaurant-list {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-  }
-
-  .r-list-header {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    font-family: 'DM Mono', monospace;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .r-list-inner { padding: 8px; max-height: 560px; overflow-y: auto; }
-  .r-list-inner::-webkit-scrollbar { width: 4px; }
-  .r-list-inner::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-  .r-item {
-    width: 100%;
-    padding: 11px 12px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    color: var(--muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    text-align: start;
-    transition: all 0.15s;
-    margin-bottom: 2px;
-  }
-
-  .r-item:hover { background: var(--subtle); color: var(--text); }
-
-  .r-item.active {
-    background: var(--accent-glow);
-    border-color: rgba(14,165,233,0.3);
-    color: var(--accent2);
-  }
-
-  .r-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .r-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .r-dot.off { background: var(--muted); }
-  .r-item-name { flex: 1; font-weight: 500; }
-  .r-item-actions { display: flex; gap: 6px; }
-  .r-mini-btn {
-    border: 1px solid var(--border);
-    background: var(--subtle);
-    color: var(--text);
-    padding: 4px 6px;
-    border-radius: 6px;
-    font-size: 11px;
-    cursor: pointer;
-  }
-  .r-mini-btn:hover { border-color: #2a3f5f; }
-
-  /* ── CHAT ── */
-  .chat-box {
-    height: 200px;
-    overflow-y: auto;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 12px;
-    margin-bottom: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .chat-box::-webkit-scrollbar { width: 4px; }
-  .chat-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
-
-  .chat-msg .sender {
-    font-size: 10px;
-    font-family: 'DM Mono', monospace;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--muted);
-  }
-
-  .chat-msg.user .sender { color: var(--accent); }
-  .chat-msg.ai .sender { color: var(--green); }
-
-  .chat-msg .bubble {
-    display: inline-block;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    line-height: 1.5;
-    max-width: 90%;
-  }
-
-  .chat-msg.user { align-items: flex-end; }
-  .chat-msg.ai { align-items: flex-start; }
-
-  [dir="rtl"] .chat-msg.user { align-items: flex-start; }
-  [dir="rtl"] .chat-msg.ai { align-items: flex-end; }
-
-  .chat-msg.user .bubble {
-    background: var(--accent-glow);
-    border: 1px solid rgba(14,165,233,0.2);
-    color: var(--text);
-  }
-
-  .chat-msg.ai .bubble {
-    background: var(--subtle);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-
-  .chat-input-row { display: flex; gap: 8px; }
-  .chat-input-row input { flex: 1; }
-
-  /* ── TABLE ── */
-  .data-table { width: 100%; border-collapse: collapse; }
-
-  .data-table thead tr { border-bottom: 1px solid var(--border); }
-
-  .data-table th {
-    padding: 10px 14px;
-    text-align: start;
-    font-size: 11px;
-    font-family: 'DM Mono', monospace;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 400;
-  }
-
-  .data-table td {
-    padding: 13px 14px;
-    font-size: 13px;
-    border-bottom: 1px solid rgba(30,45,69,0.5);
-    color: #c4d4e8;
-    vertical-align: middle;
-  }
-
-  .data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
-  .data-table tbody tr:last-child td { border-bottom: none; }
-
-  /* ── BADGES ── */
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-family: 'DM Mono', monospace;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .badge-green { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
-  .badge-red   { background: rgba(244,63,94,0.12);  color: var(--red);   border: 1px solid rgba(244,63,94,0.2); }
-  .badge-amber { background: rgba(245,158,11,0.12); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
-  .badge-blue  { background: var(--accent-glow);    color: var(--accent2);border: 1px solid rgba(14,165,233,0.2); }
-
-  /* ── EMPTY STATE ── */
-  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
-  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
-  .empty-state p { font-size: 14px; }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed;
-    bottom: 24px;
-    inset-inline-end: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 12px 18px;
-    font-size: 13px;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 9999;
-    opacity: 0;
-    transform: translateY(10px);
-    transition: all 0.3s;
-    pointer-events: none;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-    max-width: 320px;
-  }
-
-  #toast.show { opacity: 1; transform: translateY(0); }
-  #toast.success { border-color: rgba(16,185,129,0.4); }
-  #toast.success .toast-dot { background: var(--green); }
-  #toast.error { border-color: rgba(244,63,94,0.4); }
-  #toast.error .toast-dot { background: var(--red); }
-
-  .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--green); }
-
-  /* ── VOICE BUTTON ── */
-  .voice-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 14px 24px;
-    background: rgba(16,185,129,0.1);
-    border: 1px solid rgba(16,185,129,0.3);
-    border-radius: var(--radius);
-    color: var(--green);
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s;
-    width: 100%;
-    margin-top: 8px;
-  }
-
-  .voice-btn:hover {
-    background: rgba(16,185,129,0.18);
-    border-color: var(--green);
-    box-shadow: 0 0 20px rgba(16,185,129,0.15);
-  }
-
-  .voice-btn.active { background: rgba(244,63,94,0.1); border-color: var(--red); color: var(--red); }
-
-  /* ── SECTION TITLE ── */
-  .section-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-  /* ── LOADING ── */
-  .loading {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid rgba(14,165,233,0.3);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── TWILIO ── */
-  .twilio-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    align-items: center;
-  }
-
-  /* ── LANG SWITCHER ── */
-  #lang-switcher {
-    position: fixed;
-    top: 14px;
-    inset-inline-end: 14px;
-    z-index: 10000;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0;
-    overflow: hidden;
-    display: flex;
-  }
-
-  .lang-opt {
-    padding: 7px 13px;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .lang-opt:hover { background: var(--subtle); color: var(--text); }
-  .lang-opt.active { background: var(--accent-glow); color: var(--accent2); }
-
-  .lang-divider { width: 1px; background: var(--border); flex-shrink: 0; }
-
-  /* ── RTL-SPECIFIC FIXES ── */
-  /* Sidebar stays on the left in both LTR and RTL */
-  [dir="rtl"] .sidebar {
-    left: 0;
-    right: auto;
-  }
-
-  [dir="ltr"] .sidebar {
-    left: 0;
-    right: auto;
-  }
-
-  /* Card-title badge push */
-  .card-title .badge-ml { margin-inline-start: auto; }
-
-  /* AUTH */
-  .auth-modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(8,12,20,0.75);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10001;
-  }
-
-  .auth-hidden { display: none; }
-
-  .auth-card {
-    width: min(380px, 92vw);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 26px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.45);
-  }
-
-  .auth-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 20px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-
-  .auth-subtitle {
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 16px;
-  }
-
-  .auth-error {
-    color: var(--red);
-    font-size: 12px;
-    margin-top: 8px;
-    min-height: 16px;
-  }
-
-  .edit-modal-card {
-    width: min(440px, 92vw);
-  }
-
-  .edit-modal-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
+:root {
+  --bg:        #0a0e1a;
+  --surface:   #111827;
+  --surface2:  #1a2235;
+  --surface3:  #1e2a40;
+  --border:    #1f2d42;
+  --border2:   #273347;
+
+  --blue:      #3b82f6;
+  --blue-dim:  rgba(59,130,246,0.12);
+  --blue-glow: rgba(59,130,246,0.25);
+
+  --green:     #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+
+  --red:       #ef4444;
+  --red-dim:   rgba(239,68,68,0.12);
+
+  --amber:     #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+
+  --purple:    #a78bfa;
+  --purple-dim:rgba(167,139,250,0.12);
+
+  --text:      #f1f5f9;
+  --text2:     #94a3b8;
+  --text3:     #475569;
+
+  --sidebar:   220px;
+  --sidebar-sm:68px;
+  --radius:    14px;
+  --radius-sm: 9px;
+  --radius-xs: 6px;
+}
+
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { font-size:15px; }
+
+body {
+  font-family:'Outfit',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+body::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 0% 0%,    rgba(59,130,246,0.07) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(167,139,250,0.05) 0%,transparent 60%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:10px; }
+::-webkit-scrollbar-thumb:hover { background:#334155; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position:fixed;
+  inset:0 auto 0 0;
+  width:var(--sidebar);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  z-index:200;
+  transition:width .22s cubic-bezier(.4,0,.2,1);
+}
+
+.logo {
+  padding:22px 18px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:11px;
+  min-height:70px;
+}
+
+.logo-mark {
+  width:36px; height:36px;
+  background:linear-gradient(135deg,#3b82f6,#6366f1);
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:17px;
+  flex-shrink:0;
+  box-shadow:0 0 24px rgba(99,102,241,.35);
+}
+
+.logo-text {
+  font-weight:800;
+  font-size:19px;
+  letter-spacing:-.4px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.logo-text em { font-style:normal; color:var(--blue); }
+
+.sidebar-toggle {
+  margin-left:auto;
+  flex-shrink:0;
+  width:28px; height:28px;
+  border:1px solid var(--border2);
+  border-radius:var(--radius-xs);
+  background:transparent;
+  color:var(--text3);
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px;
+  transition:all .15s;
+}
+.sidebar-toggle:hover { background:var(--surface3); color:var(--text); border-color:#334155; }
+
+.nav {
+  flex:1;
+  padding:14px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+
+.nav-section {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:var(--text3);
+  letter-spacing:1.8px;
+  text-transform:uppercase;
+  padding:14px 10px 6px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.nav-btn {
+  display:flex;
+  align-items:center;
+  gap:11px;
+  width:100%;
+  padding:10px 12px;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:var(--radius-sm);
+  color:var(--text2);
+  cursor:pointer;
+  font-family:'Outfit',sans-serif;
+  font-size:14px;
+  font-weight:500;
+  transition:all .16s;
+  text-align:left;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.nav-btn:hover { background:var(--surface2); color:var(--text); }
+
+.nav-btn.active {
+  background:var(--blue-dim);
+  color:#93c5fd;
+  border-color:rgba(59,130,246,.2);
+}
+
+.nav-icon {
+  width:18px; height:18px;
+  flex-shrink:0;
+  opacity:.65;
+}
+
+.nav-btn.active .nav-icon { opacity:1; }
+
+.nav-label { white-space:nowrap; overflow:hidden; }
+
+.nav-badge {
+  margin-left:auto;
+  background:var(--blue-dim);
+  color:var(--blue);
+  border:1px solid rgba(59,130,246,.2);
+  border-radius:20px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  padding:1px 7px;
+  flex-shrink:0;
+}
+
+.sidebar-footer {
+  padding:14px 10px;
+  border-top:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.system-status {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:9px 12px;
+  background:var(--green-dim);
+  border:1px solid rgba(34,197,94,.18);
+  border-radius:var(--radius-sm);
+  font-size:12px;
+  font-weight:500;
+  color:var(--green);
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.pulse-dot {
+  width:7px; height:7px;
+  background:var(--green);
+  border-radius:50%;
+  flex-shrink:0;
+  box-shadow:0 0 8px var(--green);
+  animation:pulseAnim 2s infinite;
+}
+
+@keyframes pulseAnim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.85)} }
+
+.logout-btn {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  padding:9px 12px;
+  background:transparent;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  color:var(--text3);
+  cursor:pointer;
+  font-family:'Outfit',sans-serif;
+  font-size:13px;
+  font-weight:500;
+  transition:all .15s;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.logout-btn:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
+
+/* ── COLLAPSED ── */
+body.collapsed .sidebar { width:var(--sidebar-sm); }
+body.collapsed .main    { margin-left:var(--sidebar-sm); }
+body.collapsed .logo    { justify-content:center; padding:18px 0; }
+body.collapsed .logo-text,
+body.collapsed .nav-section,
+body.collapsed .nav-label,
+body.collapsed .nav-badge,
+body.collapsed .system-status span,
+body.collapsed .logout-btn span { display:none; }
+body.collapsed .sidebar-toggle { margin-left:0; }
+body.collapsed .nav-btn  { justify-content:center; padding:10px 0; gap:0; }
+body.collapsed .nav-section { padding:10px 0; }
+body.collapsed .system-status { justify-content:center; padding:9px 0; }
+body.collapsed .logout-btn { justify-content:center; padding:9px 0; gap:0; }
+
+/* ── MAIN ── */
+.main {
+  margin-left:var(--sidebar);
+  padding:32px 36px;
+  min-height:100vh;
+  position:relative;
+  z-index:1;
+  transition:margin-left .22s cubic-bezier(.4,0,.2,1);
+  max-width:1400px;
+}
+
+/* ── PAGES ── */
+.page { display:none; }
+.page.active { display:block; animation:fadeUp .25s ease; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── PAGE HEADER ── */
+.page-head { margin-bottom:28px; }
+
+.page-title {
+  font-size:24px;
+  font-weight:800;
+  letter-spacing:-.4px;
+}
+
+.page-sub {
+  color:var(--text2);
+  font-size:13.5px;
+  margin-top:4px;
+}
+
+/* ── STATS GRID ── */
+.stats-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:14px;
+  margin-bottom:24px;
+}
+
+.stat-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px 22px;
+  position:relative;
+  overflow:hidden;
+  cursor:default;
+  transition:all .2s;
+}
+
+.stat-card:hover {
+  border-color:var(--blue);
+  transform:translateY(-2px);
+  box-shadow:0 10px 32px rgba(59,130,246,.1);
+}
+
+.stat-card::before {
+  content:'';
+  position:absolute;
+  inset:0 0 auto 0;
+  height:2px;
+  background:linear-gradient(90deg,var(--blue),transparent);
+}
+
+.stat-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:1.2px;
+  margin-bottom:12px;
+}
+
+.stat-value {
+  font-size:30px;
+  font-weight:800;
+  letter-spacing:-.5px;
+  line-height:1;
+}
+
+.stat-emoji {
+  position:absolute;
+  right:18px; top:16px;
+  font-size:22px;
+  opacity:.18;
+}
+
+/* ── CARD ── */
+.card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin-bottom:18px;
+  transition:border-color .2s;
+}
+
+.card:hover { border-color:var(--border2); }
+
+.card-head {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:18px;
+}
+
+.card-title {
+  font-size:15px;
+  font-weight:700;
+  letter-spacing:-.2px;
+}
+
+.card-icon {
+  width:32px; height:32px;
+  background:var(--blue-dim);
+  border:1px solid rgba(59,130,246,.18);
+  border-radius:var(--radius-xs);
+  display:flex; align-items:center; justify-content:center;
+  font-size:15px;
+  flex-shrink:0;
+}
+
+.card-actions { margin-left:auto; display:flex; gap:8px; }
+
+/* ── SPLIT LAYOUT ── */
+.split {
+  display:grid;
+  grid-template-columns:250px 1fr;
+  gap:18px;
+  align-items:start;
+}
+
+/* ── RESTAURANT LIST ── */
+.r-list {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+
+.r-list-head {
+  padding:13px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-size:11px;
+  font-family:'JetBrains Mono',monospace;
+  color:var(--text3);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+
+.r-list-body {
+  padding:8px;
+  max-height:600px;
+  overflow-y:auto;
+}
+
+.r-item {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  padding:10px 12px;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  color:var(--text2);
+  font-size:13.5px;
+  font-weight:500;
+  transition:all .15s;
+  text-align:left;
+  margin-bottom:2px;
+}
+
+.r-item:hover { background:var(--surface2); color:var(--text); }
+
+.r-item.active {
+  background:var(--blue-dim);
+  border-color:rgba(59,130,246,.2);
+  color:#93c5fd;
+}
+
+.r-dot {
+  width:7px; height:7px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+
+.on  { background:var(--green); box-shadow:0 0 6px var(--green); }
+.off { background:var(--text3); }
+
+.r-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.r-assign-btn {
+  padding:4px 8px;
+  border:1px solid var(--border2);
+  border-radius:var(--radius-xs);
+  background:var(--surface2);
+  color:var(--text2);
+  font-size:12px;
+  cursor:pointer;
+  transition:all .15s;
+  flex-shrink:0;
+}
+
+.r-assign-btn:hover { border-color:var(--blue); color:var(--blue); }
+
+/* ── FORMS ── */
+.form-group { margin-bottom:15px; }
+
+.form-label {
+  display:block;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:.9px;
+  margin-bottom:7px;
+}
+
+input, textarea, select {
+  width:100%;
+  padding:11px 14px;
+  background:var(--bg);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  color:var(--text);
+  font-family:'Outfit',sans-serif;
+  font-size:14px;
+  outline:none;
+  transition:border-color .18s, box-shadow .18s;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px var(--blue-dim);
+}
+
+input::placeholder, textarea::placeholder { color:var(--text3); }
+
+textarea { resize:vertical; min-height:120px; line-height:1.65; }
+
+select { cursor:pointer; }
+select option { background:var(--surface); }
+
+.form-row {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:13px;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:9px 18px;
+  border-radius:var(--radius-sm);
+  border:1px solid transparent;
+  font-family:'Outfit',sans-serif;
+  font-size:13.5px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all .17s;
+  white-space:nowrap;
+  line-height:1;
+}
+
+.btn-primary {
+  background:var(--blue);
+  color:#fff;
+  border-color:var(--blue);
+  box-shadow:0 0 20px var(--blue-glow);
+}
+
+.btn-primary:hover {
+  background:#2563eb;
+  box-shadow:0 0 28px rgba(59,130,246,.45);
+  transform:translateY(-1px);
+}
+
+.btn-secondary {
+  background:var(--surface2);
+  color:var(--text);
+  border-color:var(--border2);
+}
+
+.btn-secondary:hover { background:var(--surface3); border-color:#334155; }
+
+.btn-danger {
+  background:var(--red-dim);
+  color:var(--red);
+  border-color:rgba(239,68,68,.2);
+}
+
+.btn-danger:hover { background:rgba(239,68,68,.22); border-color:var(--red); }
+
+.btn-success {
+  background:var(--green-dim);
+  color:var(--green);
+  border-color:rgba(34,197,94,.2);
+}
+
+.btn-ghost {
+  background:transparent;
+  color:var(--text2);
+  border-color:var(--border);
+}
+
+.btn-ghost:hover { background:var(--surface2); color:var(--text); }
+
+.btn-sm { padding:7px 13px; font-size:12.5px; }
+.btn-xs { padding:5px 10px; font-size:12px; }
+
+.btn-icon {
+  width:32px; height:32px;
+  padding:0;
+  justify-content:center;
+  border:1px solid var(--border2);
+  background:var(--surface2);
+  color:var(--text2);
+  border-radius:var(--radius-xs);
+}
+
+.btn-icon:hover { border-color:#334155; color:var(--text); }
+
+.btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+
+/* ── TABLE ── */
+.tbl-wrap { overflow-x:auto; }
+
+table.tbl {
+  width:100%;
+  border-collapse:collapse;
+}
+
+.tbl thead tr { border-bottom:1px solid var(--border); }
+
+.tbl th {
+  padding:10px 14px;
+  text-align:left;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:.9px;
+  font-weight:400;
+  white-space:nowrap;
+}
+
+.tbl td {
+  padding:13px 14px;
+  font-size:13.5px;
+  border-bottom:1px solid rgba(31,45,66,.5);
+  color:#cbd5e1;
+  vertical-align:middle;
+}
+
+.tbl tbody tr:last-child td { border-bottom:none; }
+.tbl tbody tr:hover td { background:rgba(255,255,255,.02); }
+
+/* ── BADGES ── */
+.badge {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 9px;
+  border-radius:20px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  font-weight:500;
+  white-space:nowrap;
+}
+
+.badge-green  { background:var(--green-dim); color:var(--green); border:1px solid rgba(34,197,94,.2); }
+.badge-red    { background:var(--red-dim);   color:var(--red);   border:1px solid rgba(239,68,68,.2); }
+.badge-amber  { background:var(--amber-dim); color:var(--amber); border:1px solid rgba(245,158,11,.2); }
+.badge-blue   { background:var(--blue-dim);  color:#93c5fd;      border:1px solid rgba(59,130,246,.2); }
+.badge-purple { background:var(--purple-dim);color:var(--purple);border:1px solid rgba(167,139,250,.2); }
+
+/* ── CHAT ── */
+.chat-box {
+  height:210px;
+  overflow-y:auto;
+  background:var(--bg);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  padding:14px;
+  margin-bottom:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.msg { display:flex; flex-direction:column; gap:3px; }
+
+.msg-sender {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:1.2px;
+  color:var(--text3);
+}
+
+.msg.user { align-items:flex-end; }
+.msg.user .msg-sender { color:var(--blue); }
+.msg.ai   { align-items:flex-start; }
+.msg.ai   .msg-sender { color:var(--green); }
+
+.msg-bubble {
+  padding:9px 13px;
+  border-radius:10px;
+  font-size:13.5px;
+  line-height:1.55;
+  max-width:90%;
+}
+
+.msg.user .msg-bubble {
+  background:var(--blue-dim);
+  border:1px solid rgba(59,130,246,.18);
+}
+
+.msg.ai .msg-bubble {
+  background:var(--surface2);
+  border:1px solid var(--border2);
+}
+
+.chat-row { display:flex; gap:8px; }
+.chat-row input { flex:1; }
+
+/* ── VOICE ── */
+.voice-btn {
+  width:100%;
+  padding:14px;
+  background:var(--green-dim);
+  border:1px solid rgba(34,197,94,.2);
+  border-radius:var(--radius-sm);
+  color:var(--green);
+  cursor:pointer;
+  font-family:'Outfit',sans-serif;
+  font-size:14px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  transition:all .18s;
+  margin-top:8px;
+}
+
+.voice-btn:hover {
+  background:rgba(34,197,94,.18);
+  box-shadow:0 0 20px rgba(34,197,94,.15);
+}
+
+.voice-btn.active {
+  background:var(--red-dim);
+  border-color:rgba(239,68,68,.3);
+  color:var(--red);
+}
+
+/* ── TWILIO BOX ── */
+.twilio-row { display:flex; gap:9px; align-items:center; }
+.twilio-row input { flex:1; font-family:'JetBrains Mono',monospace; font-size:12px; }
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align:center;
+  padding:52px 20px;
+  color:var(--text3);
+}
+
+.empty-icon { font-size:36px; margin-bottom:10px; opacity:.35; }
+.empty-text { font-size:13.5px; }
+
+/* ── SECTION LABEL ── */
+.section-lbl {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:1.4px;
+  margin-bottom:13px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.section-lbl::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ── LOADING ── */
+.spin {
+  display:inline-block;
+  width:14px; height:14px;
+  border:2px solid rgba(59,130,246,.3);
+  border-top-color:var(--blue);
+  border-radius:50%;
+  animation:spin .65s linear infinite;
+}
+
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── TOAST ── */
+#toast {
+  position:fixed;
+  bottom:22px;
+  right:22px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  padding:11px 18px;
+  font-size:13.5px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  z-index:9999;
+  opacity:0;
+  transform:translateY(8px);
+  transition:all .28s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+  box-shadow:0 10px 36px rgba(0,0,0,.45);
+  max-width:320px;
+}
+
+#toast.show { opacity:1; transform:translateY(0); }
+#toast.ok   { border-left:3px solid var(--green); }
+#toast.err  { border-left:3px solid var(--red); }
+#toast.ok .toast-icon::before { content:'✓'; color:var(--green); }
+#toast.err .toast-icon::before { content:'✕'; color:var(--red); }
+.toast-icon { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; }
+
+/* ── AUTH OVERLAY ── */
+.overlay {
+  position:fixed;
+  inset:0;
+  background:rgba(5,8,18,.85);
+  backdrop-filter:blur(6px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:10000;
+}
+
+.overlay.hidden { display:none; }
+
+.auth-card {
+  width:min(400px,93vw);
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  padding:28px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);
+}
+
+.auth-logo {
+  width:42px; height:42px;
+  background:linear-gradient(135deg,#3b82f6,#6366f1);
+  border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+  margin-bottom:18px;
+  box-shadow:0 0 24px rgba(99,102,241,.35);
+}
+
+.auth-title { font-size:22px; font-weight:800; letter-spacing:-.3px; margin-bottom:5px; }
+.auth-sub   { font-size:13px; color:var(--text2); margin-bottom:20px; }
+.auth-err   { color:var(--red); font-size:12.5px; margin-top:8px; min-height:16px; }
+
+/* ── EDIT USER MODAL ── */
+.modal-overlay {
+  position:fixed;
+  inset:0;
+  background:rgba(5,8,18,.75);
+  backdrop-filter:blur(4px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9000;
+}
+
+.modal-overlay.hidden { display:none; }
+
+.modal-card {
+  width:min(440px,93vw);
+  background:var(--surface);
+  border:1px solid var(--border2);
+  border-radius:var(--radius);
+  padding:26px;
+  box-shadow:0 16px 50px rgba(0,0,0,.5);
+}
+
+.modal-title { font-size:18px; font-weight:700; margin-bottom:4px; }
+.modal-sub   { font-size:13px; color:var(--text2); margin-bottom:18px; }
+.modal-actions { display:flex; gap:9px; justify-content:flex-end; margin-top:6px; }
+.modal-err { color:var(--red); font-size:12.5px; margin-top:8px; min-height:16px; }
+
+/* ── LANG SWITCH ── */
+#lang-switch {
+  position:fixed;
+  top:14px; right:14px;
+  z-index:10100;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-xs);
+  display:flex;
+  overflow:hidden;
+}
+
+.lang-opt {
+  padding:6px 12px;
+  background:transparent;
+  border:none;
+  color:var(--text3);
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  cursor:pointer;
+  transition:all .14s;
+}
+
+.lang-opt:hover { background:var(--surface3); color:var(--text); }
+.lang-opt.on { background:var(--blue-dim); color:#93c5fd; }
+.lang-divider { width:1px; background:var(--border); }
+
+/* ── ADMIN USERS LIST ── */
+.admin-user-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:11px 14px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  margin-bottom:8px;
+  gap:10px;
+}
+
+.admin-user-info { display:flex; flex-direction:column; gap:2px; }
+.admin-user-email { font-size:13.5px; font-weight:500; }
+.admin-user-status { font-size:11px; color:var(--text3); }
+
+.admin-user-btns { display:flex; gap:7px; flex-wrap:wrap; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .split { grid-template-columns:1fr; }
+  .form-row { grid-template-columns:1fr; }
+  .main { padding:20px; }
+}
+
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .sidebar { display:none; }
+  .main { margin-left:0; }
+}
 </style>
 </head>
-<body dir="ltr">
+<body>
 
-<!-- Language Switcher -->
-<div id="lang-switcher">
-  <button class="lang-opt active" onclick="setLang('en')">EN</button>
+<!-- Lang -->
+<div id="lang-switch">
+  <button class="lang-opt on" onclick="setLang('en')">EN</button>
   <div class="lang-divider"></div>
   <button class="lang-opt" onclick="setLang('he')">עב</button>
 </div>
 
-<!-- Auth Modal -->
-<div id="authModal" class="auth-modal auth-hidden">
+<!-- Auth -->
+<div id="authOverlay" class="overlay hidden">
   <div class="auth-card">
+    <div class="auth-logo">🎙️</div>
     <div class="auth-title" data-i18n="Sign in">Sign in</div>
-    <div class="auth-subtitle" data-i18n="Sign in to continue">Sign in to continue</div>
+    <div class="auth-sub" data-i18n="Sign in to continue">Sign in to your VoiceIQ account</div>
     <div class="form-group">
       <label class="form-label" data-i18n="Email">Email</label>
       <input id="authEmail" type="email" placeholder="admin@example.com">
@@ -876,28 +955,30 @@
       <label class="form-label" data-i18n="Password">Password</label>
       <input id="authPassword" type="password" placeholder="••••••••">
     </div>
-    <button class="btn btn-primary" onclick="login()" data-i18n="Sign in">Sign in</button>
-    <div id="authError" class="auth-error"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="login()">
+      Sign in →
+    </button>
+    <div id="authErr" class="auth-err"></div>
   </div>
 </div>
 
 <!-- Edit User Modal -->
-<div id="editUserModal" class="auth-modal auth-hidden">
-  <div class="auth-card edit-modal-card">
-    <div class="auth-title" data-i18n="Edit User">Edit User</div>
-    <div class="auth-subtitle" data-i18n="Update email and password for this user">Update email and password for this user</div>
+<div id="editUserOverlay" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-title" data-i18n="Edit User">Edit User</div>
+    <div class="modal-sub" data-i18n="Update email and password for this user">Update credentials for this user</div>
     <div class="form-group">
-      <label class="form-label" data-i18n="Admin Email">Admin Email</label>
-      <input id="editUserEmail" type="email" placeholder="manager@example.com">
+      <label class="form-label" data-i18n="Admin Email">Email</label>
+      <input id="editEmail" type="email" placeholder="manager@example.com">
     </div>
     <div class="form-group">
-      <label class="form-label" data-i18n="New Password (optional)">New Password (optional)</label>
-      <input id="editUserPassword" type="password" placeholder="••••••••">
+      <label class="form-label" data-i18n="New Password (optional)">New Password (leave blank to keep current)</label>
+      <input id="editPassword" type="password" placeholder="••••••••">
     </div>
-    <div id="editUserError" class="auth-error"></div>
-    <div class="edit-modal-actions">
-      <button class="btn btn-secondary btn-sm" onclick="closeEditUserModal()" data-i18n="Cancel">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="saveEditedUser()" data-i18n="Save Changes">Save Changes</button>
+    <div id="editErr" class="modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm" onclick="closeEditUser()" data-i18n="Cancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEditUser()" data-i18n="Save Changes">Save Changes</button>
     </div>
   </div>
 </div>
@@ -905,232 +986,235 @@
 <!-- Sidebar -->
 <nav class="sidebar">
   <div class="logo">
-    <div class="logo-icon">🎙️</div>
-    <div class="logo-text">Voice<span>IQ</span></div>
-    <button id="sidebarToggle" class="sidebar-toggle" type="button" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
+    <div class="logo-mark">🎙️</div>
+    <div class="logo-text">Voice<em>IQ</em></div>
+    <button class="sidebar-toggle" id="toggleBtn" onclick="toggleSidebar()">‹</button>
   </div>
 
   <div class="nav">
-    <div class="nav-label" data-i18n="Platform">Platform</div>
+    <div class="nav-section" data-i18n="Platform">Platform</div>
+
     <button class="nav-btn active" onclick="show('dash',this)">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      <span data-i18n="Dashboard">Dashboard</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="nav-label" data-i18n="Dashboard">Dashboard</span>
     </button>
-    <button id="nav-global" class="nav-btn" onclick="show('global',this)">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      <span data-i18n="Global Prompt">Global Prompt</span>
+
+    <button class="nav-btn" id="navGlobal" onclick="show('global',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/></svg>
+      <span class="nav-label" data-i18n="Global Prompt">Global Prompt</span>
     </button>
-    <button id="nav-restaurants" class="nav-btn" onclick="show('restaurants',this)">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
-      <span data-i18n="Restaurants">Restaurants</span>
+
+    <button class="nav-btn" id="navRest" onclick="show('restaurants',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
+      <span class="nav-label" data-i18n="Restaurants">Restaurants</span>
     </button>
+
     <button class="nav-btn" onclick="show('orders',this)">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-        <polyline points="3.29 7 12 12 20.71 7"/>
-        <line x1="12" y1="22" x2="12" y2="12"/>
-      </svg>
-      <span data-i18n="Orders">Orders</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+      <span class="nav-label" data-i18n="Orders">Orders</span>
     </button>
+
     <button class="nav-btn" onclick="show('logs',this)">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      <span data-i18n="Call Logs">Call Logs</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      <span class="nav-label" data-i18n="Call Logs">Call Logs</span>
     </button>
   </div>
 
   <div class="sidebar-footer">
-    <div class="status-pill">
-      <div class="status-dot"></div>
+    <div class="system-status">
+      <div class="pulse-dot"></div>
       <span data-i18n="System Online">System Online</span>
     </div>
-    <button class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%" onclick="logout()" data-i18n="Logout">Logout</button>
+    <button class="logout-btn" onclick="logout()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span data-i18n="Logout">Logout</span>
+    </button>
   </div>
 </nav>
 
-<!-- Main content -->
+<!-- Main -->
 <main class="main">
 
   <!-- Dashboard -->
   <div id="dash" class="page active">
-    <div class="page-header">
-      <div class="page-title" data-i18n="Dashboard">Dashboard</div>
-      <div class="page-subtitle" data-i18n="Platform performance overview">Platform performance overview</div>
+    <div class="page-head">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Real-time overview of your IVR platform</div>
     </div>
 
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Active Restaurants">Active Restaurants</div>
-        <div class="stat-value" id="s-restaurants">—</div>
-        <div class="stat-icon">🍽️</div>
+        <div class="stat-label">Active Restaurants</div>
+        <div class="stat-value" id="sRest">—</div>
+        <div class="stat-emoji">🍽️</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Total Calls">Total Calls</div>
-        <div class="stat-value" id="s-calls">—</div>
-        <div class="stat-icon">📞</div>
+        <div class="stat-label">Total Calls</div>
+        <div class="stat-value" id="sCalls">—</div>
+        <div class="stat-emoji">📞</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Missed Calls">Missed Calls</div>
-        <div class="stat-value" id="s-missed">—</div>
-        <div class="stat-icon">📵</div>
+        <div class="stat-label">Missed Calls</div>
+        <div class="stat-value" id="sMissed">—</div>
+        <div class="stat-emoji">📵</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Total Duration">Total Duration</div>
-        <div class="stat-value" id="s-duration">—</div>
-        <div class="stat-icon">⏱️</div>
+        <div class="stat-label">Total Duration</div>
+        <div class="stat-value" id="sDur">—</div>
+        <div class="stat-emoji">⏱️</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="API Usage">API Usage</div>
-        <div class="stat-value" id="s-usage">0</div>
-        <div class="stat-icon">🔌</div>
+        <div class="stat-label">API Usage</div>
+        <div class="stat-value" id="sUsage">0</div>
+        <div class="stat-emoji">🔌</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label" data-i18n="Usage Cost">Usage Cost</div>
-        <div class="stat-value" id="s-cost">$0.00</div>
-        <div class="stat-icon">💳</div>
+        <div class="stat-label">Est. Cost</div>
+        <div class="stat-value" id="sCost">$0.00</div>
+        <div class="stat-emoji">💳</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        <span data-i18n="Recent Activity">Recent Activity</span>
+      <div class="card-head">
+        <div class="card-icon">📋</div>
+        <div class="card-title">Recent Activity</div>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th data-i18n="Restaurant">Restaurant</th>
-            <th data-i18n="Caller">Caller</th>
-            <th data-i18n="Status">Status</th>
-            <th data-i18n="Duration">Duration</th>
-            <th data-i18n="Date">Date</th>
-          </tr>
-        </thead>
-        <tbody id="recentLogs">
-          <tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📋</div><p data-i18n="No recent calls">No recent calls</p></div></td></tr>
-        </tbody>
-      </table>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th>
+          </tr></thead>
+          <tbody id="recentLogs">
+            <tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No recent calls</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- Global Prompt -->
   <div id="global" class="page">
-    <div class="page-header">
-      <div class="page-title" data-i18n="Global Prompt">Global Prompt</div>
-      <div class="page-subtitle" data-i18n="global-sub">This prompt is injected into every restaurant's AI context</div>
+    <div class="page-head">
+      <div class="page-title">Global Prompt</div>
+      <div class="page-sub">This prompt applies to every restaurant on the platform</div>
     </div>
 
     <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        <span data-i18n="Base System Prompt">Base System Prompt</span>
+      <div class="card-head">
+        <div class="card-icon">🌐</div>
+        <div class="card-title">Base System Prompt</div>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveGlobal()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
+            Save
+          </button>
+        </div>
       </div>
       <div class="form-group">
-        <label class="form-label" data-i18n="Prompt Content">Prompt Content</label>
-        <textarea id="globalPrompt" style="min-height:180px"></textarea>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary" onclick="saveGlobal()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          <span data-i18n="Save Changes">Save Changes</span>
-        </button>
+        <label class="form-label">Prompt Content</label>
+        <textarea id="globalPrompt" style="min-height:200px"></textarea>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span data-i18n="Tips">Tips</span>
+    <div class="card" style="border-color:rgba(59,130,246,.2);background:var(--blue-dim)">
+      <div class="card-head">
+        <div class="card-icon">💡</div>
+        <div class="card-title">How it works</div>
       </div>
-      <p style="font-size:13px;color:var(--muted);line-height:1.7" data-i18n="global-tip">
-        The global prompt sets the baseline behavior for all restaurants. Each restaurant's individual prompt is appended after this, allowing per-restaurant customization.
+      <p style="font-size:13.5px;color:var(--text2);line-height:1.75">
+        The global prompt sets the baseline personality and rules for all your restaurant AI assistants.
+        Each restaurant's individual IVR prompt is appended after this, allowing customization per location.
       </p>
     </div>
   </div>
 
   <!-- Restaurants -->
   <div id="restaurants" class="page">
-    <div class="page-header">
-      <div class="page-title" data-i18n="Restaurants">Restaurants</div>
-      <div class="page-subtitle" data-i18n="Manage connected restaurant profiles">Manage connected restaurant profiles</div>
+    <div class="page-head">
+      <div class="page-title">Restaurants</div>
+      <div class="page-sub">Manage your connected restaurant profiles and IVR configurations</div>
     </div>
 
-    <div class="split-layout">
-      <div class="restaurant-list">
-        <div class="r-list-header">
-          <span data-i18n="Restaurant List">Restaurant List</span>
-          <button id="createBtn" class="btn btn-ghost btn-sm" onclick="toggleCreate()" title="Add new">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-        </div>
-        <div class="r-list-inner" id="rlist">
-          <div class="empty-state" style="padding:30px 16px">
-            <div class="empty-icon" style="font-size:28px">🍽️</div>
-            <p data-i18n="No restaurants yet">No restaurants yet</p>
+    <div class="split">
+      <!-- Left list -->
+      <div>
+        <div class="r-list">
+          <div class="r-list-head">
+            <span>Locations</span>
+            <button id="createBtn" class="btn-icon" onclick="toggleCreate()" title="Add restaurant">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="r-list-body" id="rlist">
+            <div class="empty" style="padding:30px 16px">
+              <div class="empty-icon">🍽️</div>
+              <div class="empty-text">No restaurants yet</div>
+            </div>
           </div>
         </div>
       </div>
 
+      <!-- Right pane -->
       <div id="rightPane">
         <div id="createBox" class="card" style="display:none">
-          <div class="card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span data-i18n="Create Restaurant">Create Restaurant</span>
+          <div class="card-head">
+            <div class="card-icon">➕</div>
+            <div class="card-title">New Restaurant</div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" data-i18n="Restaurant Name">Restaurant Name</label>
-              <input id="rname" data-placeholder-i18n="e.g. Bella Italia">
+              <label class="form-label">Restaurant Name</label>
+              <input id="rname" placeholder="e.g. Bella Italia">
             </div>
             <div class="form-group">
-              <label class="form-label" data-i18n="Phone Number">Phone Number</label>
+              <label class="form-label">Phone Number</label>
               <input id="rphone" placeholder="+1 (555) 000-0000">
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label" data-i18n="IVR Prompt">IVR Prompt</label>
-            <textarea id="rprompt"></textarea>
+            <label class="form-label">IVR Prompt</label>
+            <textarea id="rprompt" placeholder="Custom instructions for this location..."></textarea>
           </div>
-          <div class="actions">
+          <div class="btn-row">
             <button class="btn btn-primary" onclick="addRestaurant()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span data-i18n="Create Restaurant">Create Restaurant</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create Restaurant
             </button>
           </div>
         </div>
 
         <div id="assignBox" class="card" style="display:none">
-          <div class="card-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-            <span data-i18n="Assign Admin">Assign Admin</span>
+          <div class="card-head">
+            <div class="card-icon">👤</div>
+            <div class="card-title">Assign Admin</div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" data-i18n="Admin Email">Admin Email</label>
+              <label class="form-label">Admin Email</label>
               <input id="adminEmail" placeholder="manager@example.com">
             </div>
             <div class="form-group">
-              <label class="form-label" data-i18n="Temp Password">Temp Password</label>
+              <label class="form-label">Password</label>
               <input id="adminPassword" type="password" placeholder="••••••••">
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label" data-i18n="Restaurant">Restaurant</label>
+            <label class="form-label">Restaurant</label>
             <select id="adminRestaurant"></select>
           </div>
-          <div class="actions">
-            <button class="btn btn-primary" onclick="createOrAssignAdmin()">
-              <span data-i18n="Create/Assign">Create/Assign</span>
-            </button>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="createOrAssignAdmin()">Create / Assign</button>
           </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px" data-i18n="Assign Admin Help">
-            If user exists, we only assign. If not, we create with password.
-          </div>
+          <p style="font-size:12px;color:var(--text3);margin-top:10px">
+            If the user already exists, we'll just assign them. Otherwise we create a new account.
+          </p>
         </div>
 
         <div id="rdetail">
-          <div class="card" style="text-align:center; padding:60px 20px">
-            <div style="font-size:40px;margin-bottom:12px;opacity:0.25">👆</div>
-            <div style="color:var(--muted);font-size:14px" data-i18n="Select a restaurant to manage it">Select a restaurant to manage it</div>
+          <div class="card" style="text-align:center;padding:60px 24px">
+            <div style="font-size:42px;margin-bottom:12px;opacity:.18">👆</div>
+            <div style="color:var(--text3);font-size:14px">Select a restaurant to manage it</div>
           </div>
         </div>
       </div>
@@ -1139,71 +1223,53 @@
 
   <!-- Orders -->
   <div id="orders" class="page">
-    <div class="page-header">
-      <div class="page-title" data-i18n="Orders">Orders</div>
-      <div class="page-subtitle" data-i18n="Structured orders captured from calls">Structured orders captured from calls</div>
+    <div class="page-head">
+      <div class="page-title">Orders</div>
+      <div class="page-sub">Reservation data captured from voice calls</div>
     </div>
 
     <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-          <polyline points="3.29 7 12 12 20.71 7"/>
-          <line x1="12" y1="22" x2="12" y2="12"/>
-        </svg>
-        <span data-i18n="All Orders">All Orders</span>
+      <div class="card-head">
+        <div class="card-icon">📦</div>
+        <div class="card-title">All Reservations</div>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th data-i18n="Restaurant">Restaurant</th>
-            <th data-i18n="Customer">Customer</th>
-            <th data-i18n="Order Type">Order Type</th>
-            <th data-i18n="Arrival Date">Arrival Date</th>
-            <th data-i18n="Arrival Time">Arrival Time</th>
-            <th data-i18n="Total People">Total People</th>
-            <th data-i18n="Contact Number">Contact Number</th>
-            <th>Recording</th>
-            <th data-i18n="Status">Status</th>
-            <th data-i18n="Date">Date</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="orderTable">
-          <tr><td colspan="12"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
-        </tbody>
-      </table>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>Restaurant</th><th>Customer</th><th>Type</th>
+            <th>Date</th><th>Time</th><th>Guests</th><th>Phone</th>
+            <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="orderTable">
+            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No orders yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- Call Logs -->
   <div id="logs" class="page">
-    <div class="page-header">
-      <div class="page-title" data-i18n="Call Logs">Call Logs</div>
-      <div class="page-subtitle" data-i18n="Full history of all IVR interactions">Full history of all IVR interactions</div>
+    <div class="page-head">
+      <div class="page-title">Call Logs</div>
+      <div class="page-sub">Complete history of all IVR interactions</div>
     </div>
 
     <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        <span data-i18n="All Calls">All Calls</span>
+      <div class="card-head">
+        <div class="card-icon">📞</div>
+        <div class="card-title">All Calls</div>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th data-i18n="Restaurant">Restaurant</th>
-            <th data-i18n="Caller">Caller</th>
-            <th data-i18n="Status">Status</th>
-            <th data-i18n="Duration">Duration</th>
-            <th data-i18n="Date">Date</th>
-          </tr>
-        </thead>
-        <tbody id="logTable">
-          <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📵</div><p data-i18n="No calls recorded yet">No calls recorded yet</p></div></td></tr>
-        </tbody>
-      </table>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th>
+          </tr></thead>
+          <tbody id="logTable">
+            <tr><td colspan="6"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1211,1349 +1277,910 @@
 
 <!-- Toast -->
 <div id="toast">
-  <div class="toast-dot"></div>
+  <div class="toast-icon"></div>
   <span id="toastMsg"></span>
 </div>
 
 <script>
 // ─── I18N ────────────────────────────────────────────────────────────────────
-const TRANSLATIONS = {
-  en: {
-    "Twilio guide": "To integrate this agent with your Twilio number: go to Twilio Console -> Phone Numbers -> Active Numbers -> select your number -> Voice Configuration -> A Call Comes In -> choose Webhook, paste this URL, and save using HTTP POST.",
-    "Sign in": "Sign in",
-    "Sign in to continue": "Sign in to continue",
-    "Email": "Email",
-    "Password": "Password",
-    "Logout": "Logout",
-    "Invalid credentials": "Invalid credentials",
-    "Logged out": "Logged out",
-    "Assign Admin": "Assign Admin",
-    "Admin Email": "Admin Email",
-    "Temp Password": "Temp Password",
-    "Create/Assign": "Create/Assign",
-    "Assign Admin Help": "If user exists, we only assign. If not, we create with password.",
-    "Admin assigned": "Admin assigned",
-    "Admins for this restaurant": "Admins for this restaurant",
-    "No admins assigned": "No admins assigned",
-    "Edit User": "Edit User",
-    "Delete User": "Delete User",
-    "Enter new email": "Enter new email",
-    "Enter new password (leave empty to keep current)": "Enter new password (leave empty to keep current)",
-    "User updated": "User updated",
-    "User deleted": "User deleted",
-    "Delete this user? This cannot be undone.": "Delete this user? This cannot be undone.",
-    "Update email and password for this user": "Update email and password for this user",
-    "New Password (optional)": "New Password (optional)",
-    "Cancel": "Cancel",
-    "Revoke Access": "Revoke Access",
-    "Restore Access": "Restore Access",
-    "Loading...": "Loading...",
-    "Orders": "Orders",
-    "All Orders": "All Orders",
-    "Structured orders captured from calls": "Structured orders captured from calls",
-    "Customer": "Customer",
-    "Order Type": "Order Type",
-    "Arrival Date": "Arrival Date",
-    "Arrival Time": "Arrival Time",
-    "Total People": "Total People",
-    "Contact Number": "Contact Number",
-    "Address": "Address",
-    "Items": "Items",
-    "Payment": "Payment",
-    "No orders recorded yet": "No orders recorded yet",
-    "Order captured": "Order captured",
-    "Order capture failed": "Order capture failed"
-  },
-  he: {
-    "Platform": "פלטפורמה",
-    "Dashboard": "לוח בקרה",
-    "Global Prompt": "פרומפט גלובלי",
-    "Restaurants": "מסעדות",
-    "Call Logs": "יומני שיחות",
-    "System Online": "המערכת פעילה",
-    "Platform performance overview": "סקירת ביצועי הפלטפורמה",
-    "Active Restaurants": "מסעדות פעילות",
-    "Total Calls": "סה״כ שיחות",
-    "Missed Calls": "שיחות שלא נענו",
-    "Avg Duration": "משך ממוצע",
-    "API Usage": "שימוש ב-API",
-    "Usage Cost": "עלות שימוש",
-    "Recent Activity": "פעילות אחרונה",
-    "Restaurant": "מסעדה",
-    "Caller": "מתקשר",
-    "Status": "סטטוס",
-    "Duration": "משך",
-    "Date": "תאריך",
-    "No recent calls": "אין שיחות אחרונות",
-    "Base System Prompt": "פרומפט מערכת בסיסי",
-    "Prompt Content": "תוכן הפרומפט",
-    "Save Changes": "שמור שינויים",
-    "Tips": "טיפים",
-    "global-sub": "פרומפט זה מוזרק לכל הקשר ה-AI של המסעדה",
-    "global-tip": "הפרומפט הגלובלי קובע את ההתנהגות הבסיסית לכל המסעדות. הפרומפט של כל מסעדה מצורף אחריו.",
-    "Restaurant List": "רשימת מסעדות",
-    "No restaurants yet": "אין עדיין מסעדות",
-    "Create Restaurant": "יצירת מסעדה",
-    "Restaurant Name": "שם המסעדה",
-    "Phone Number": "מספר טלפון",
-    "IVR Prompt": "פרומפט IVR",
-    "Select a restaurant to manage it": "בחר מסעדה כדי לנהל אותה",
-    "Manage connected restaurant profiles": "ניהול פרופילי מסעדות מחוברות",
-    "All Calls": "כל השיחות",
-    "Full history of all IVR interactions": "היסטוריה מלאה של כל אינטראקציות ה-IVR",
-    "No calls recorded yet": "עדיין לא נרשמו שיחות",
-    "Name": "שם",
-    "Phone": "טלפון",
-    "Save": "שמור",
-    "Delete": "מחק",
-    "Active": "פעיל",
-    "Inactive": "לא פעיל",
-    "Text Chat": "צ'אט טקסט",
-    "Voice Chat": "צ'אט קולי",
-    "Voice Chat desc": "התחל שיחה קולית בזמן אמת עם העוזר.",
-    "Start Voice Session": "התחל שיחה קולית",
-    "End Voice Session": "סיים שיחה קולית",
-    "Twilio Webhook": "וובהוק Twilio",
-    "Twilio guide": "כדי לחבר את הסוכן הזה למספר ה-Twilio שלך: עבור ל-Twilio Console ← Phone Numbers ← Active Numbers ← בחר את המספר ← Voice Configuration ← A Call Comes In ← בחר Webhook, הדבק את ה-URL הזה ושמור באמצעות HTTP POST.",
-    "Public Base URL (ngrok/hosted)": "כתובת בסיס ציבורית (ngrok/hosted)",
-    "Twilio Webhook URL": "כתובת Webhook של Twilio",
-    "Copy": "העתק",
-    "You": "אתה",
-    "AI": "AI",
-    "Deactivate": "השבת",
-    "Activate": "הפעל",
-    // toasts
-    "Global prompt saved successfully": "הפרומפט הגלובלי נשמר",
-    "Failed to save": "השמירה נכשלה",
-    "Restaurant name is required": "שם מסעדה הוא שדה חובה",
-    "Failed to add restaurant": "הוספת המסעדה נכשלה",
-    "Restaurant updated": "המסעדה עודכנה",
-    "Update failed": "העדכון נכשל",
-    "Status updated": "הסטטוס עודכן",
-    "Failed": "נכשל",
-    "Restaurant deleted": "המסעדה נמחקה",
-    "Delete failed": "המחיקה נכשלה",
-    "Select a restaurant first": "בחר מסעדה קודם",
-    "Server error, we will fix soon.": "שגיאת שרת, נטפל בזה בקרוב.",
-    "Connection error": "שגיאת חיבור",
-    "Voice session started": "השיחה הקולית התחילה",
-    "Voice session error": "שגיאת שיחה קולית",
-    "Voice requires HTTPS": "שיחה קולית דורשת HTTPS עם גישת מיקרופון",
-    "Twilio URL copied": "כתובת Twilio הועתקה",
-    "Copy failed": "ההעתקה נכשלה",
-    "Delete this restaurant? This cannot be undone.": "למחוק את המסעדה? לא ניתן לבטל.",
-    "Assign Admin": "הקצאת מנהל",
-    "Admin Email": "אימייל מנהל",
-    "Temp Password": "סיסמה זמנית",
-    "Create/Assign": "צור/שייך",
-    "Assign Admin Help": "אם המשתמש קיים נשייך בלבד. אם לא, ניצור עם סיסמה.",
-    "Admin assigned": "מנהל שויך",
-    "Admins for this restaurant": "מנהלים למסעדה זו",
-    "No admins assigned": "אין מנהלים משויכים",
-    "Revoke Access": "בטל גישה",
-    "Restore Access": "שחזר גישה",
-    "Loading...": "טוען..."
-  }
+const HE = {
+  "Sign in":"התחבר","Sign in to continue":"התחבר לחשבון שלך","Email":"אימייל","Password":"סיסמה",
+  "Dashboard":"לוח בקרה","Global Prompt":"פרומפט גלובלי","Restaurants":"מסעדות",
+  "Orders":"הזמנות","Call Logs":"יומן שיחות","System Online":"מערכת פעילה",
+  "Logout":"יציאה","Platform":"פלטפורמה","Edit User":"עריכת משתמש",
+  "Update email and password for this user":"עדכון פרטי הכניסה",
+  "Admin Email":"אימייל מנהל","New Password (optional)":"סיסמה חדשה (אופציונלי)",
+  "Cancel":"ביטול","Save Changes":"שמור שינויים"
 };
 
-let currentLang = localStorage.getItem('ui_lang') || 'en';
+let lang = localStorage.getItem('ui_lang') || 'en';
 
-function t(key) {
-  if (currentLang === 'en') return (TRANSLATIONS.en && TRANSLATIONS.en[key]) || key;
-  return (TRANSLATIONS.he && TRANSLATIONS.he[key]) || key;
-}
+function t(k) { return lang === 'he' && HE[k] ? HE[k] : k; }
 
-function setLang(lang) {
-  currentLang = lang;
-  localStorage.setItem('ui_lang', lang);
-
-  // Update html dir + lang
-  document.documentElement.lang = lang;
-  document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
-  document.body.dir = lang === 'he' ? 'rtl' : 'ltr';
-
-  // Lang switcher buttons
-  document.querySelectorAll('.lang-opt').forEach(b => {
-    b.classList.toggle('active', b.textContent.trim() === (lang === 'en' ? 'EN' : 'עב'));
-  });
-
-  // Translate all data-i18n elements
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('ui_lang', l);
+  const isHe = l === 'he';
+  document.documentElement.dir = isHe ? 'rtl' : 'ltr';
+  document.body.dir = isHe ? 'rtl' : 'ltr';
+  document.querySelectorAll('.lang-opt').forEach(b =>
+    b.classList.toggle('on', b.textContent.trim() === (isHe ? 'עב' : 'EN')));
   document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    const translated = t(key);
-    if (translated !== key || lang === 'en') {
-      el.textContent = translated;
-    }
-  });
-
-  // Translate placeholders
-  document.querySelectorAll('[data-placeholder-i18n]').forEach(el => {
-    const key = el.getAttribute('data-placeholder-i18n');
-    el.placeholder = t(key);
-  });
-
-  // Re-render restaurant detail if open (to translate dynamic content)
-  if (selectedId) openRestaurant(selectedId, true);
-  refreshSidebarNavTitles();
-}
-
-function refreshSidebarNavTitles() {
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    const label = btn.querySelector('span[data-i18n]')?.textContent?.trim()
-      || btn.querySelector('span')?.textContent?.trim()
-      || '';
-    if (label) btn.title = label;
+    const k = el.getAttribute('data-i18n');
+    const tr = t(k);
+    if (tr !== k || l === 'en') el.textContent = tr;
   });
 }
 
-// ─── CORE APP ────────────────────────────────────────────────────────────────
+// ─── STATE ───────────────────────────────────────────────────────────────────
 const API_BASE = (() => {
-  const saved = normalizeUrl(localStorage.getItem('apiBaseUrl') || '');
+  const saved = (localStorage.getItem('apiBaseUrl') || '').trim().replace(/\/+$/,'');
   if (saved) return saved;
-
-  const isLocalStaticFrontend =
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "::1") &&
-    window.location.port === "8000";
-
-  const apiOrigin = isLocalStaticFrontend
-    ? window.location.origin.replace(":8000", ":5050")
-    : window.location.origin;
-
-  return `${apiOrigin}/api`;
+  const isLocal8k = ['localhost','127.0.0.1','::1'].includes(location.hostname) && location.port === '8000';
+  return isLocal8k
+    ? location.origin.replace(':8000', ':5050') + '/api'
+    : location.origin + '/api';
 })();
-const authState = {
-  token: localStorage.getItem('auth_token') || ''
-};
-let sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === '1';
 
-function applySidebarState() {
-  document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
-  const btn = document.getElementById('sidebarToggle');
-  if (btn) {
-    btn.textContent = sidebarCollapsed ? '›' : '‹';
-    btn.title = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
-  }
-}
+let token   = localStorage.getItem('auth_token') || '';
+let me      = null;
+let rCache  = [];
+let oCache  = [];
+let uCache  = [];
+let selId   = null;
+let editUid = null;
+let assignOpen = false;
+let assignRid  = null;
+let collapsed  = localStorage.getItem('sb_col') === '1';
+let inited  = false;
 
-function toggleSidebar() {
-  sidebarCollapsed = !sidebarCollapsed;
-  localStorage.setItem('sidebar_collapsed', sidebarCollapsed ? '1' : '0');
-  applySidebarState();
-}
+const ORDER_MARKER = 'ORDER_JSON:';
+let oc = { buf:'', tail:'', done:false };
 
-let initialized = false;
-let currentUser = null;
-let usersCache = [];
-let editingUserId = null;
+let vs = { pc:null, stream:null, audio:null, dc:null, on:false };
 
-function setAuthToken(token) {
-  authState.token = token || '';
-  if (authState.token) {
-    localStorage.setItem('auth_token', authState.token);
-  } else {
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const h = { ...(opts.headers || {}) };
+  if (token) h.Authorization = `Bearer ${token}`;
+  const r = await fetch(path, { ...opts, headers:h });
+  if (r.status === 401) {
+    token = '';
     localStorage.removeItem('auth_token');
-  }
-}
-
-function showLogin(message) {
-  const modal = document.getElementById('authModal');
-  const err = document.getElementById('authError');
-  err.textContent = message || '';
-  modal.classList.remove('auth-hidden');
-}
-
-function hideLogin() {
-  const modal = document.getElementById('authModal');
-  const err = document.getElementById('authError');
-  err.textContent = '';
-  modal.classList.add('auth-hidden');
-}
-
-function closeEditUserModal() {
-  const modal = document.getElementById('editUserModal');
-  const err = document.getElementById('editUserError');
-  const email = document.getElementById('editUserEmail');
-  const password = document.getElementById('editUserPassword');
-  if (err) err.textContent = '';
-  if (email) email.value = '';
-  if (password) password.value = '';
-  editingUserId = null;
-  modal?.classList.add('auth-hidden');
-}
-
-async function apiFetch(url, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (authState.token) headers.Authorization = `Bearer ${authState.token}`;
-  const res = await fetch(url, { ...options, headers });
-  if (res.status === 401) {
-    setAuthToken('');
-    showLogin(t('Sign in to continue'));
+    showAuth('Sign in to continue');
     throw new Error('Unauthorized');
   }
-  return res;
+  return r;
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+function showAuth(msg) {
+  document.getElementById('authOverlay').classList.remove('hidden');
+  document.getElementById('authErr').textContent = msg || '';
+}
+
+function hideAuth() {
+  document.getElementById('authOverlay').classList.add('hidden');
+  document.getElementById('authErr').textContent = '';
 }
 
 async function login() {
   const email = document.getElementById('authEmail').value.trim();
-  const password = document.getElementById('authPassword').value;
-  const err = document.getElementById('authError');
+  const pass  = document.getElementById('authPassword').value;
+  const err   = document.getElementById('authErr');
   err.textContent = '';
-  if (!email || !password) {
-    err.textContent = t('Invalid credentials');
-    return;
-  }
+  if (!email || !pass) { err.textContent = 'Please fill in all fields'; return; }
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+    const r = await fetch(`${API_BASE}/auth/login`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email, password:pass })
     });
-    const data = await res.json();
-    if (!res.ok || !data.token) throw new Error('auth failed');
-    setAuthToken(data.token);
-    hideLogin();
-    await initAfterAuth();
-  } catch (e) {
-    err.textContent = t('Invalid credentials');
-  }
+    const d = await r.json();
+    if (!r.ok || !d.token) throw new Error();
+    token = d.token;
+    localStorage.setItem('auth_token', token);
+    hideAuth();
+    await boot();
+  } catch { err.textContent = 'Invalid email or password'; }
 }
 
-document.getElementById('authPassword')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') login();
-});
-
-document.getElementById('editUserPassword')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveEditedUser();
-});
-
-document.getElementById('editUserModal')?.addEventListener('click', (e) => {
-  if (e.target?.id === 'editUserModal') closeEditUserModal();
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeEditUserModal();
-});
+document.getElementById('authPassword').addEventListener('keydown', e => e.key === 'Enter' && login());
 
 async function logout() {
-  try {
-    if (authState.token) {
-      await apiFetch(`${API_BASE}/auth/logout`, { method: 'POST' });
-    }
-  } catch (e) {}
-  setAuthToken('');
-  showLogin(t('Logged out'));
+  try { if (token) await api(`${API_BASE}/auth/logout`, { method:'POST' }); } catch {}
+  token = '';
+  localStorage.removeItem('auth_token');
+  inited = false;
+  showAuth('');
 }
 
 async function checkAuth() {
-  if (!authState.token) {
-    showLogin();
-    return false;
-  }
+  if (!token) { showAuth(); return false; }
   try {
-    const me = await (await apiFetch(`${API_BASE}/auth/me`)).json();
-    currentUser = me;
-    applyRoleUI();
-    hideLogin();
+    const r = await api(`${API_BASE}/auth/me`);
+    me = await r.json();
+    applyRole();
     return true;
-  } catch (e) {
-    showLogin(t('Sign in to continue'));
-    return false;
-  }
+  } catch { showAuth(); return false; }
 }
 
-async function loadMe() {
-  try {
-    const me = await (await apiFetch(`${API_BASE}/auth/me`)).json();
-    currentUser = me;
-    applyRoleUI();
-  } catch (e) {}
+function applyRole() {
+  const admin = !!me?.is_admin;
+  document.getElementById('navGlobal').style.display = admin ? '' : 'none';
+  document.getElementById('createBtn').style.display = admin ? '' : 'none';
 }
 
-function applyRoleUI() {
-  const isAdmin = !!currentUser?.is_admin;
-  const navGlobal = document.getElementById('nav-global');
-  if (navGlobal) navGlobal.style.display = isAdmin ? '' : 'none';
-  const assignBox = document.getElementById('assignBox');
-  if (assignBox) assignBox.style.display = (isAdmin && assignBoxOpenedByIcon) ? 'block' : 'none';
-  const createBox = document.getElementById('createBox');
-  if (createBox && !isAdmin) createBox.style.display = 'none';
-  const createBtn = document.getElementById('createBtn');
-  if (createBtn) createBtn.style.display = isAdmin ? '' : 'none';
-  if (!isAdmin) {
-    const btns = document.querySelectorAll('.nav-btn');
-    btns.forEach(b => {
-      if (b.id === 'nav-global') return;
-    });
-  }
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  collapsed = !collapsed;
+  localStorage.setItem('sb_col', collapsed ? '1' : '0');
+  document.body.classList.toggle('collapsed', collapsed);
+  document.getElementById('toggleBtn').textContent = collapsed ? '›' : '‹';
 }
 
-async function initAfterAuth() {
-  if (initialized) return;
-  initialized = true;
-  await loadMe();
-  loadGlobal();
-  loadRestaurants();
-  loadStats();
-  loadLogs();
-}
-let restaurantsCache = [];
-let ordersCache = [];
-let selectedId = null;
-let assignBoxOpenedByIcon = false;
-let assignBoxRestaurantId = null;
-const ORDER_JSON_MARKER = "ORDER_JSON:";
-let orderCapture = { buffer: "", markerTail: "", saved: false };
-let voiceSession = {
-  pc: null,
-  localStream: null,
-  audioEl: null,
-  dc: null,
-  active: false
-};
-
+// ─── PAGES ───────────────────────────────────────────────────────────────────
 function show(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  if (id === 'logs') loadLogs();
-  if (id === 'orders') loadOrders();
+  if (id === 'logs')        loadLogs();
+  if (id === 'orders')      loadOrders();
   if (id === 'restaurants') loadRestaurants();
 }
 
+// ─── TOAST ───────────────────────────────────────────────────────────────────
 let toastTimer;
-function toast(msg, type = 'success') {
+function toast(msg, type = 'ok') {
   clearTimeout(toastTimer);
   const el = document.getElementById('toast');
   el.className = `show ${type}`;
-  document.getElementById('toastMsg').textContent = t(msg);
+  document.getElementById('toastMsg').textContent = msg;
   toastTimer = setTimeout(() => { el.className = ''; }, 3200);
 }
 
-function esc(v) {
-  return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+const esc = v => String(v ?? '').replace(/[&<>"']/g, m =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+function fmtDur(s) {
+  s = Math.max(0, Math.round(Number(s) || 0));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
-function normalizeUrl(url) {
-  return String(url || '').trim().replace(/\/+$/, '');
+function statusBadge(s) {
+  if (!s) return `<span class="badge badge-amber">Unknown</span>`;
+  const sl = s.toLowerCase();
+  if (sl.includes('answer') || sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
+  if (sl.includes('miss') || sl.includes('fail'))      return `<span class="badge badge-red">${esc(s)}</span>`;
+  return `<span class="badge badge-blue">${esc(s)}</span>`;
 }
 
-function sanitizeTwilioBaseUrl(url) {
-  let cleaned = normalizeUrl(url);
-  cleaned = cleaned.replace(/\/incoming-call(?:\/\d+)?(?:\?.*)?$/i, '');
-  return cleaned;
+function orderStatusBadge(s) {
+  if (!s) return `<span class="badge badge-amber">Unknown</span>`;
+  const sl = s.toLowerCase();
+  if (sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
+  if (sl.includes('incompl')) return `<span class="badge badge-amber">${esc(s)}</span>`;
+  return `<span class="badge badge-blue">${esc(s)}</span>`;
 }
 
-function getPublicBaseUrl() {
-  return sanitizeTwilioBaseUrl(localStorage.getItem('twilioBaseUrl') || '');
+function monospace(v) {
+  return `<span style="font-family:'JetBrains Mono',monospace;font-size:12px">${esc(v)}</span>`;
 }
 
-function setPublicBaseUrl(url) {
-  localStorage.setItem('twilioBaseUrl', sanitizeTwilioBaseUrl(url));
-}
+function dim(v) { return `<span style="color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:11.5px">${esc(v)}</span>`; }
 
-function getTwilioBaseUrl() {
-  return sanitizeTwilioBaseUrl(getPublicBaseUrl() || API_BASE);
-}
-
-function buildTwilioUrl(id) {
-  const base = getTwilioBaseUrl();
-  return `${base}/incoming-call/${id}`;
-}
-
-function toggleCreate() {
-  const box = document.getElementById('createBox');
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-}
-
-// ─── API CALLS ────────────────────────────────────────────────────────────────
+// ─── GLOBAL PROMPT ───────────────────────────────────────────────────────────
 async function loadGlobal() {
   try {
-    const r = await apiFetch(`${API_BASE}/prompt/`);
+    const r = await api(`${API_BASE}/prompt/`);
     const d = await r.json();
     document.getElementById('globalPrompt').value = d.prompt || '';
-  } catch(e) {}
+  } catch {}
 }
 
 async function saveGlobal() {
   try {
-    await apiFetch(`${API_BASE}/prompt/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: document.getElementById('globalPrompt').value })
+    await api(`${API_BASE}/prompt/save`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ content: document.getElementById('globalPrompt').value })
     });
-    toast('Global prompt saved successfully');
-  } catch(e) { toast('Failed to save', 'error'); }
+    toast('Global prompt saved ✓');
+  } catch { toast('Save failed', 'err'); }
 }
 
-function formatDuration(value) {
-  const totalSeconds = Math.max(0, Math.round(Number(value) || 0));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
-}
-
+// ─── STATS ───────────────────────────────────────────────────────────────────
 async function loadStats() {
   try {
-    const s = await (await apiFetch(`${API_BASE}/dashboard/stats`)).json();
-    document.getElementById('s-restaurants').textContent = s.restaurants ?? 0;
-    document.getElementById('s-calls').textContent = s.calls ?? 0;
-    document.getElementById('s-missed').textContent = s.missed ?? 0;
-    const totalDuration = s.total_duration ?? 0;
-    document.getElementById('s-duration').textContent = formatDuration(totalDuration);
-  } catch(e) {}
+    const s = await (await api(`${API_BASE}/dashboard/stats`)).json();
+    document.getElementById('sRest').textContent   = s.restaurants ?? 0;
+    document.getElementById('sCalls').textContent  = s.calls ?? 0;
+    document.getElementById('sMissed').textContent = s.missed ?? 0;
+    document.getElementById('sDur').textContent    = fmtDur(s.total_duration ?? 0);
+  } catch {}
 }
 
-function statusBadge(s) {
-  if (!s) return `<span class="badge badge-amber">${t('Unknown')}</span>`;
-  const sl = s.toLowerCase();
-  if (sl.includes('answer') || sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
-  if (sl.includes('miss') || sl.includes('fail')) return `<span class="badge badge-red">${esc(s)}</span>`;
-  return `<span class="badge badge-blue">${esc(s)}</span>`;
-}
-
-function resetOrderCapture() {
-  orderCapture = { buffer: "", markerTail: "", saved: false };
-}
-
-function cleanOrderField(value) {
-  if (value === null || value === undefined) return '';
-  const text = String(value).trim();
-  if (!text) return '';
-  const lc = text.toLowerCase();
-  if (['none','null','n/a','na','unknown'].includes(lc)) return '';
-  return text;
-}
-
-function firstOrderValue(obj, keys) {
-  for (const k of keys) {
-    if (obj && Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
-  }
-  return null;
-}
-
-function normalizeOrderPayloadClient(data) {
-  if (!data || typeof data !== 'object') {
-    return { data: {}, missing: ['full_name','date-arrival','time_arrival','total_peoples','contact_number'] };
-  }
-  const fullName = cleanOrderField(firstOrderValue(data, ['full_name','fullName','name','customer_name','customerName']));
-  const dateArrival = cleanOrderField(firstOrderValue(data, ['date-arrival','date_arrival','arrival_date','dateArrival']));
-  const timeArrival = cleanOrderField(firstOrderValue(data, ['time_arrival','arrival_time','timeArrival','time']));
-  const contactNumber = cleanOrderField(firstOrderValue(data, ['contact_number','contactNumber','phone','phone_number']));
-  const totalRaw = firstOrderValue(data, ['total_peoples','total_people','people','party_size']);
-  const totalDigits = cleanOrderField(totalRaw).replace(/\D/g, '');
-  const totalPeoples = totalDigits ? Number(totalDigits) : (Number.isInteger(totalRaw) ? totalRaw : 0);
-
-  const missing = [];
-  if (!fullName) missing.push('full_name');
-  if (!dateArrival) missing.push('date-arrival');
-  if (!timeArrival) missing.push('time_arrival');
-  if (!totalPeoples || totalPeoples <= 0) missing.push('total_peoples');
-  if (!contactNumber) missing.push('contact_number');
-
-  return {
-    data: {
-      order_type: 'reservation',
-      full_name: fullName,
-      'date-arrival': dateArrival,
-      time_arrival: timeArrival,
-      total_peoples: totalPeoples,
-      contact_number: contactNumber
-    },
-    missing
-  };
-}
-
-function extractTextCandidates(evt) {
-  if (!evt || typeof evt !== 'object') return [];
-  const type = String(evt.type || '');
-  if (type === 'response.output_audio.delta' || type === 'response.audio.delta') return [];
-  const texts = [];
-  ['delta','text','transcript'].forEach(k => {
-    const v = evt[k];
-    if (typeof v === 'string' && v) texts.push(v);
-  });
-  ['item','response'].forEach(k => {
-    const nested = evt[k];
-    if (!nested || typeof nested !== 'object') return;
-    ['text','transcript'].forEach(nk => {
-      const v = nested[nk];
-      if (typeof v === 'string' && v) texts.push(v);
-    });
-    const content = nested.content;
-    if (Array.isArray(content)) {
-      content.forEach(part => {
-        if (!part || typeof part !== 'object') return;
-        ['text','transcript'].forEach(ck => {
-          const v = part[ck];
-          if (typeof v === 'string' && v) texts.push(v);
-        });
-      });
-    }
-  });
-  return texts;
-}
-
-function parseOrderJsonFromBuffer(buffer) {
-  if (!buffer) return null;
-  const markerIdx = buffer.indexOf(ORDER_JSON_MARKER);
-  if (markerIdx < 0) return null;
-  let tail = buffer.slice(markerIdx + ORDER_JSON_MARKER.length).trimStart();
-  if (tail.startsWith('```')) {
-    const fenceEnd = tail.indexOf('\n');
-    if (fenceEnd !== -1) tail = tail.slice(fenceEnd + 1);
-  }
-  const start = tail.indexOf('{');
-  if (start < 0) return null;
-  let depth = 0;
-  let end = -1;
-  for (let i = start; i < tail.length; i++) {
-    const ch = tail[i];
-    if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) { end = i; break; }
-    }
-  }
-  if (end < 0) return null;
-  const jsonStr = tail.slice(start, end + 1);
+// ─── LOGS ────────────────────────────────────────────────────────────────────
+async function loadLogs() {
   try {
-    const data = JSON.parse(jsonStr);
-    if (!data || typeof data !== 'object') return null;
-    return { raw: jsonStr, data };
-  } catch {
-    return null;
-  }
-}
-
-async function ingestOrder(data, raw) {
-  if (!selectedId) return;
-  const payload = {
-    restaurant_id: selectedId,
-    order_type: data.order_type,
-    full_name: data.full_name,
-    'date-arrival': data['date-arrival'],
-    time_arrival: data.time_arrival,
-    total_peoples: data.total_peoples,
-    contact_number: data.contact_number,
-    raw_json: raw
-  };
-  const res = await apiFetch(`${API_BASE}/orders/ingest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.warn('Order ingest failed', err);
-    throw new Error(err.detail || 'order save failed');
-  }
-}
-
-function handleRealtimeEventMessage(data) {
-  if (orderCapture.saved) return;
-  let evt;
-  try {
-    evt = JSON.parse(data);
-  } catch {
-    return;
-  }
-  const texts = extractTextCandidates(evt);
-  for (const text of texts) {
-    if (!text) continue;
-    if (orderCapture.buffer) {
-      orderCapture.buffer += text;
-    } else {
-      const combined = orderCapture.markerTail + text;
-      if (!combined.includes(ORDER_JSON_MARKER)) {
-        orderCapture.markerTail = combined.slice(-(ORDER_JSON_MARKER.length - 1));
-        continue;
-      }
-      const idx = combined.indexOf(ORDER_JSON_MARKER);
-      orderCapture.buffer = combined.slice(idx);
+    const logs = await (await api(`${API_BASE}/calls/`)).json();
+    const tbody = document.getElementById('logTable');
+    const recent = document.getElementById('recentLogs');
+    if (!logs.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>`;
+      return;
     }
-    if (orderCapture.buffer.length > 10000) {
-      orderCapture.buffer = orderCapture.buffer.slice(-10000);
-    }
-    const parsed = parseOrderJsonFromBuffer(orderCapture.buffer);
-    if (!parsed) continue;
-    const normalized = normalizeOrderPayloadClient(parsed.data);
-    if (normalized.missing.length) {
-      console.warn('Order JSON missing fields', normalized.missing, parsed.data);
-      orderCapture.buffer = '';
-      orderCapture.markerTail = '';
-      continue;
-    }
-    ingestOrder(normalized.data, parsed.raw)
-      .then(() => {
-        orderCapture.saved = true;
-        toast('Order captured');
-        if (document.getElementById('orders')?.classList.contains('active')) {
-          loadOrders();
-        }
-      })
-      .catch(() => toast('Order capture failed', 'error'));
-    break;
-  }
+    const row = l => `<tr>
+      <td>${dim('#' + l.id)}</td>
+      <td style="font-weight:500">${esc(l.restaurant)}</td>
+      <td>${monospace(l.caller)}</td>
+      <td>${statusBadge(l.status)}</td>
+      <td>${monospace(fmtDur(l.duration))}</td>
+      <td>${dim(l.created)}</td>
+    </tr>`;
+    tbody.innerHTML  = logs.map(row).join('');
+    recent.innerHTML = logs.slice(0,5).map(l => `<tr>
+      <td style="font-weight:500">${esc(l.restaurant)}</td>
+      <td>${monospace(l.caller)}</td>
+      <td>${statusBadge(l.status)}</td>
+      <td>${monospace(fmtDur(l.duration))}</td>
+      <td>${dim(l.created)}</td>
+    </tr>`).join('');
+  } catch {}
 }
 
-function orderStatusBadge(s) {
-  if (!s) return `<span class="badge badge-amber">${t('Unknown')}</span>`;
-  const sl = s.toLowerCase();
-  if (sl.includes('incomplete')) return `<span class="badge badge-amber">${esc(s)}</span>`;
-  if (sl.includes('complete')) return `<span class="badge badge-green">${esc(s)}</span>`;
-  return `<span class="badge badge-blue">${esc(s)}</span>`;
-}
-
-function toAbsoluteRecordingUrl(url) {
-  const raw = String(url || '').trim();
-  if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (raw.startsWith('/')) {
-    try {
-      const base = new URL(API_BASE, window.location.origin);
-      return `${base.origin}${raw}`;
-    } catch (e) {
-      return raw;
-    }
+// ─── ORDERS ──────────────────────────────────────────────────────────────────
+function recUrl(url) {
+  const s = String(url || '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('/')) {
+    try { return new URL(API_BASE, location.origin).origin + s; } catch { return s; }
   }
-  return raw;
-}
-
-async function editOrder(orderId) {
-  const o = ordersCache.find(x => Number(x.id) === Number(orderId));
-  if (!o) { toast('Order not found', 'error'); return; }
-
-  const fullName = prompt('Customer name', o.full_name ?? '');
-  if (fullName === null) return;
-  const dateArrival = prompt('Arrival date', o.address ?? '');
-  if (dateArrival === null) return;
-  const timeArrival = prompt('Arrival time', o.house_number ?? '');
-  if (timeArrival === null) return;
-  const totalPeoples = prompt('Total people', o.ordered_items ?? '');
-  if (totalPeoples === null) return;
-  const contactNumber = prompt('Contact number', o.payment_method ?? '');
-  if (contactNumber === null) return;
-  const status = prompt('Status', o.status ?? 'completed');
-  if (status === null) return;
-
-  try {
-    const res = await apiFetch(`${API_BASE}/orders/${orderId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        full_name: fullName,
-        date_arrival: dateArrival,
-        time_arrival: timeArrival,
-        total_peoples: totalPeoples,
-        contact_number: contactNumber,
-        status
-      })
-    });
-    if (!res.ok) throw new Error('update failed');
-    toast('Order updated');
-    await loadOrders();
-  } catch (e) {
-    toast('Failed', 'error');
-  }
-}
-
-async function deleteOrder(orderId) {
-  if (!confirm(`Delete order #${orderId}?`)) return;
-  try {
-    const res = await apiFetch(`${API_BASE}/orders/${orderId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('delete failed');
-    toast('Order deleted');
-    await loadOrders();
-  } catch (e) {
-    toast('Failed', 'error');
-  }
+  return s;
 }
 
 async function loadOrders() {
   try {
-    const orders = await (await apiFetch(`${API_BASE}/orders/`)).json();
-    ordersCache = Array.isArray(orders) ? orders : [];
+    const orders = await (await api(`${API_BASE}/orders/`)).json();
+    oCache = Array.isArray(orders) ? orders : [];
     const tbody = document.getElementById('orderTable');
-    if (!ordersCache.length) {
-      tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
+    if (!oCache.length) {
+      tbody.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No orders yet</div></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = ordersCache.map(o => {
-      const dateArrival = o['date-arrival'] || o.date_arrival || o.address || '';
-      const timeArrival = o.time_arrival || o['time-arrival'] || o.house_number || '';
-      const totalPeoples = o.total_peoples ?? o.total_people ?? o.ordered_items ?? '';
-      const contactNumber = o.contact_number || o.contactNumber || o.payment_method || '';
-      const recordingUrl = toAbsoluteRecordingUrl(o.recording_url);
-      const recordingCell = recordingUrl
-        ? `<audio controls preload="none" src="${esc(recordingUrl)}" style="width:180px;height:30px"></audio>`
-        : `<span style="color:var(--muted)">-</span>`;
-      return `
-        <tr>
-          <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${o.id}</td>
-          <td>${esc(o.restaurant)}</td>
-          <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(o.full_name)}</td>
-          <td>${esc(o.order_type)}</td>
-          <td>${esc(dateArrival)}</td>
-          <td>${esc(timeArrival)}</td>
-          <td>${esc(totalPeoples)}</td>
-          <td>${esc(contactNumber)}</td>
-          <td>${recordingCell}</td>
-          <td>${orderStatusBadge(o.status)}</td>
-          <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(o.created)}</td>
-          <td>
-            <div style="display:flex;gap:6px;justify-content:center">
-              <button class="btn btn-secondary btn-sm" onclick="editOrder(${o.id})">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.id})">Delete</button>
-            </div>
-          </td>
-        </tr>`;
+    tbody.innerHTML = oCache.map(o => {
+      const dateArrival  = o['date-arrival'] || o.date_arrival  || o.address        || '';
+      const timeArrival  = o.time_arrival   || o['time-arrival'] || o.house_number   || '';
+      const totalPeoples = o.total_peoples  ?? o.ordered_items  ?? '';
+      const contact      = o.contact_number || o.payment_method || '';
+      const rec          = recUrl(o.recording_url);
+      const recCell      = rec
+        ? `<audio controls preload="none" src="${esc(rec)}" style="width:170px;height:28px"></audio>`
+        : `<span style="color:var(--text3)">—</span>`;
+      return `<tr>
+        <td>${dim('#' + o.id)}</td>
+        <td style="font-weight:500">${esc(o.restaurant)}</td>
+        <td>${monospace(o.full_name)}</td>
+        <td><span class="badge badge-purple">${esc(o.order_type)}</span></td>
+        <td>${monospace(dateArrival)}</td>
+        <td>${monospace(timeArrival)}</td>
+        <td>${monospace(totalPeoples)}</td>
+        <td>${monospace(contact)}</td>
+        <td>${recCell}</td>
+        <td>${orderStatusBadge(o.status)}</td>
+        <td>${dim(o.created)}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-xs" onclick="editOrder(${o.id})">Edit</button>
+            <button class="btn btn-danger btn-xs" onclick="deleteOrder(${o.id})">Delete</button>
+          </div>
+        </td>
+      </tr>`;
     }).join('');
-  } catch(e) {}
+  } catch {}
 }
 
-async function loadLogs() {
+async function editOrder(id) {
+  const o = oCache.find(x => Number(x.id) === Number(id));
+  if (!o) { toast('Order not found', 'err'); return; }
+  const fn  = prompt('Customer name',   o.full_name ?? '');     if (fn  === null) return;
+  const da  = prompt('Arrival date',    o.address ?? '');       if (da  === null) return;
+  const ta  = prompt('Arrival time',    o.house_number ?? '');  if (ta  === null) return;
+  const tp  = prompt('Total people',    o.ordered_items ?? ''); if (tp  === null) return;
+  const cn  = prompt('Contact number',  o.payment_method ?? '');if (cn  === null) return;
+  const st  = prompt('Status',          o.status ?? 'completed');if (st === null) return;
   try {
-    const logs = await (await apiFetch(`${API_BASE}/calls/`)).json();
-    const tbody = document.getElementById('logTable');
-    const recent = document.getElementById('recentLogs');
-    if (!logs.length) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📵</div><p>${t('No calls recorded yet')}</p></div></td></tr>`;
-      return;
-    }
-    tbody.innerHTML = logs.map(l => `
-      <tr>
-        <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${l.id}</td>
-        <td>${esc(l.restaurant)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
-        <td>${statusBadge(l.status)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${formatDuration(l.duration)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
-      </tr>`).join('');
-    recent.innerHTML = logs.slice(0,5).map(l => `
-      <tr>
-        <td>${esc(l.restaurant)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(l.caller)}</td>
-        <td>${statusBadge(l.status)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:12px">${formatDuration(l.duration)}</td>
-        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(l.created)}</td>
-      </tr>`).join('');
-  } catch(e) {}
+    const r = await api(`${API_BASE}/orders/${id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ full_name:fn, date_arrival:da, time_arrival:ta, total_peoples:tp, contact_number:cn, status:st })
+    });
+    if (!r.ok) throw new Error();
+    toast('Order updated ✓');
+    loadOrders();
+  } catch { toast('Update failed', 'err'); }
 }
 
+async function deleteOrder(id) {
+  if (!confirm(`Delete order #${id}? This cannot be undone.`)) return;
+  try {
+    const r = await api(`${API_BASE}/orders/${id}`, { method:'DELETE' });
+    if (!r.ok) throw new Error();
+    toast('Order deleted');
+    loadOrders();
+  } catch { toast('Delete failed', 'err'); }
+}
+
+// ─── ORDER CAPTURE (from realtime events) ────────────────────────────────────
+function resetOC() { oc = { buf:'', tail:'', done:false }; }
+
+function pickFirst(d, ...keys) {
+  for (const k of keys) if (d && k in d) return d[k];
+  return null;
+}
+
+function cleanField(v) {
+  const s = String(v ?? '').trim();
+  return ['','none','null','n/a','na','unknown'].includes(s.toLowerCase()) ? '' : s;
+}
+
+function normalizeOC(data) {
+  const fn = cleanField(pickFirst(data,'full_name','fullName','name','customer_name'));
+  const da = cleanField(pickFirst(data,'date-arrival','date_arrival','arrival_date','dateArrival'));
+  const ta = cleanField(pickFirst(data,'time_arrival','arrival_time','timeArrival','time'));
+  const cn = cleanField(pickFirst(data,'contact_number','contactNumber','phone','phone_number'));
+  const rt = pickFirst(data,'total_peoples','total_people','people','party_size');
+  const digits = cleanField(rt).replace(/\D/g,'');
+  const tp = digits ? Number(digits) : (Number.isInteger(rt) ? rt : 0);
+  const missing = [];
+  if (!fn) missing.push('full_name');
+  if (!da) missing.push('date-arrival');
+  if (!ta) missing.push('time_arrival');
+  if (!cn) missing.push('contact_number');
+  if (!tp) missing.push('total_peoples');
+  return { data:{order_type:'reservation',full_name:fn,'date-arrival':da,time_arrival:ta,total_peoples:tp,contact_number:cn}, missing };
+}
+
+function parseOCBuf(buf) {
+  const mi = buf.indexOf(ORDER_MARKER);
+  if (mi < 0) return null;
+  let tail = buf.slice(mi + ORDER_MARKER.length).trimStart();
+  if (tail.startsWith('```')) { const nl = tail.indexOf('\n'); tail = nl !== -1 ? tail.slice(nl+1) : tail.slice(3); }
+  const st = tail.indexOf('{');
+  if (st < 0) return null;
+  let depth=0, end=-1;
+  for (let i=st; i<tail.length; i++) {
+    if (tail[i]==='{') depth++;
+    else if (tail[i]==='}') { depth--; if (!depth) { end=i; break; } }
+  }
+  if (end<0) return null;
+  try { const d = JSON.parse(tail.slice(st,end+1)); return { raw: tail.slice(st,end+1), data: d }; }
+  catch { return null; }
+}
+
+function extractTexts(evt) {
+  if (!evt || typeof evt !== 'object') return [];
+  const t2 = String(evt.type||'');
+  if (t2==='response.output_audio.delta'||t2==='response.audio.delta') return [];
+  const out = [];
+  const add = v => { if (typeof v==='string'&&v) out.push(v); };
+  ['delta','text','transcript'].forEach(k => add(evt[k]));
+  ['item','response'].forEach(k => {
+    const n = evt[k];
+    if (!n||typeof n!=='object') return;
+    ['text','transcript'].forEach(nk => add(n[nk]));
+    (n.content||[]).forEach(p => { if (p&&typeof p==='object') ['text','transcript'].forEach(pk => add(p[pk])); });
+  });
+  if (t2==='response.done') {
+    for (const item of ((evt.response||{}).output||[])) {
+      if (!item||typeof item!=='object') continue;
+      for (const p of (item.content||[])) {
+        if (p&&typeof p==='object') ['text','transcript'].forEach(pk => add(p[pk]));
+      }
+    }
+  }
+  return out;
+}
+
+async function ingestOrder(data, raw) {
+  if (!selId) return;
+  const r = await api(`${API_BASE}/orders/ingest`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ restaurant_id:selId, ...data, raw_json:raw })
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail||'failed'); }
+}
+
+function handleRTEvent(raw) {
+  if (oc.done) return;
+  let evt;
+  try { evt = JSON.parse(raw); } catch { return; }
+  for (const text of extractTexts(evt)) {
+    if (!text) continue;
+    if (oc.buf) {
+      oc.buf += text;
+    } else {
+      const combined = oc.tail + text;
+      if (!combined.includes(ORDER_MARKER)) {
+        oc.tail = combined.slice(-(ORDER_MARKER.length-1));
+        continue;
+      }
+      oc.buf = combined.slice(combined.indexOf(ORDER_MARKER));
+    }
+    if (oc.buf.length > 10000) oc.buf = oc.buf.slice(-10000);
+    const parsed = parseOCBuf(oc.buf);
+    if (!parsed) continue;
+    const { data, missing } = normalizeOC(parsed.data);
+    if (missing.length) { oc.buf=''; oc.tail=''; continue; }
+    ingestOrder(data, parsed.raw)
+      .then(() => { oc.done=true; toast('Reservation saved ✓'); if (document.getElementById('orders').classList.contains('active')) loadOrders(); })
+      .catch(() => toast('Order save failed', 'err'));
+    break;
+  }
+}
+
+// ─── RESTAURANTS ─────────────────────────────────────────────────────────────
 async function loadRestaurants() {
   try {
-    const data = await (await apiFetch(`${API_BASE}/restaurants/`)).json();
-    restaurantsCache = data;
-    if (currentUser?.is_admin) populateAdminRestaurant();
+    const data = await (await api(`${API_BASE}/restaurants/`)).json();
+    rCache = data;
+    if (me?.is_admin) populateRestaurantSelect();
     const list = document.getElementById('rlist');
     if (!data.length) {
-      list.innerHTML = `<div class="empty-state" style="padding:30px 16px"><div class="empty-icon" style="font-size:28px">🍽️</div><p>${t('No restaurants yet')}</p></div>`;
+      list.innerHTML = `<div class="empty" style="padding:30px 16px"><div class="empty-icon">🍽️</div><div class="empty-text">No restaurants yet</div></div>`;
       return;
     }
-    const isAdmin = !!currentUser?.is_admin;
+    const admin = !!me?.is_admin;
     list.innerHTML = data.map(r => `
-      <div class="r-item ${r.id === selectedId ? 'active' : ''}">
-        <div class="r-dot ${r.active ? 'on' : 'off'}"></div>
-        <span class="r-item-name" onclick="openRestaurant(${r.id})">${esc(r.name || 'Unnamed')}</span>
-        ${isAdmin ? `
-        <div class="r-item-actions">
-          <button class="r-mini-btn" onclick="showAssignForRestaurant(${r.id})">👤</button>
-        </div>` : ``}
+      <div class="r-item ${r.id===selId?'active':''}" id="ri-${r.id}">
+        <div class="r-dot ${r.active?'on':'off'}"></div>
+        <span class="r-name" onclick="openR(${r.id})">${esc(r.name||'Unnamed')}</span>
+        ${admin ? `<button class="r-assign-btn" onclick="showAssign(${r.id})" title="Manage admins">👤</button>` : ''}
       </div>`).join('');
-    if (selectedId) openRestaurant(selectedId, true);
-  } catch(e) {}
+    if (selId) openR(selId, true);
+  } catch {}
 }
 
-function populateAdminRestaurant() {
-  const sel = document.getElementById('adminRestaurant');
-  if (!sel) return;
-  sel.innerHTML = restaurantsCache.map(r => `<option value="${r.id}">${esc(r.name || 'Unnamed')}</option>`).join('');
-}
-
-async function loadAdminsForRestaurant(restaurantId) {
-  const list = document.getElementById('adminList');
-  if (!list) return;
-  list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('Loading...')}</div>`;
-  try {
-    const data = await (await apiFetch(`${API_BASE}/auth/users/by-restaurant/${restaurantId}`)).json();
-    usersCache = data;
-    if (!data.length) {
-      list.innerHTML = `<div style="color:var(--muted);font-size:12px">${t('No admins assigned')}</div>`;
-      return;
-    }
-    list.innerHTML = data.map(u => `
-      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--border);padding:8px;border-radius:8px;background:var(--surface2)">
-        <div style="display:flex;flex-direction:column">
-          <span style="font-size:13px">${esc(u.email)}</span>
-          <span style="font-size:11px;color:var(--muted)">${u.active ? t('Active') : t('Inactive')}</span>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn btn-secondary btn-sm" onclick="editRestaurantUser(${u.id})" title="${t('Edit User')}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="deleteRestaurantUser(${u.id})" title="${t('Delete User')}">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="setUserStatus(${u.id}, ${u.active ? 'false' : 'true'})">
-            ${u.active ? t('Revoke Access') : t('Restore Access')}
-          </button>
-        </div>
-      </div>`).join('');
-  } catch (e) {
-    list.innerHTML = `<div style="color:var(--red);font-size:12px">${t('Failed')}</div>`;
-  }
-}
-
-async function editRestaurantUser(userId) {
-  const user = usersCache.find(u => u.id === userId);
-  if (!user) {
-    toast('Failed', 'error');
-    return;
-  }
-  editingUserId = userId;
-  const modal = document.getElementById('editUserModal');
-  const err = document.getElementById('editUserError');
-  const email = document.getElementById('editUserEmail');
-  const password = document.getElementById('editUserPassword');
-  if (err) err.textContent = '';
-  if (email) email.value = user.email || '';
-  if (password) password.value = '';
-  modal?.classList.remove('auth-hidden');
-  email?.focus();
-}
-
-async function saveEditedUser() {
-  if (!editingUserId) return;
-  const err = document.getElementById('editUserError');
-  const newEmail = String(document.getElementById('editUserEmail')?.value || '').trim().toLowerCase();
-  const newPassword = String(document.getElementById('editUserPassword')?.value || '').trim();
-  if (!newEmail || !newEmail.includes('@') || !newEmail.includes('.')) {
-    if (err) err.textContent = t('Invalid email');
-    return;
-  }
-  if (newPassword && newPassword.length < 6) {
-    if (err) err.textContent = t('Password too short');
-    return;
-  }
-  const payload = { email: newEmail };
-  if (newPassword) payload.password = newPassword;
-  try {
-    const res = await apiFetch(`${API_BASE}/auth/users/${editingUserId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || t('Failed'));
-    }
-    closeEditUserModal();
-    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
-    if (restaurantId) loadAdminsForRestaurant(restaurantId);
-    toast('User updated');
-  } catch (e) {
-    if (err) err.textContent = e.message || t('Failed');
-  }
-}
-
-async function deleteRestaurantUser(userId) {
-  if (!confirm(t('Delete this user? This cannot be undone.'))) return;
-  try {
-    const res = await apiFetch(`${API_BASE}/auth/users/${userId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed');
-    }
-    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
-    if (restaurantId) loadAdminsForRestaurant(restaurantId);
-    toast('User deleted');
-  } catch (e) {
-    toast(e.message || 'Failed', 'error');
-  }
-}
-
-async function setUserStatus(userId, active) {
-  try {
-    await apiFetch(`${API_BASE}/auth/users/${userId}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active })
-    });
-    const restaurantId = selectedId || parseInt(document.getElementById('adminRestaurant')?.value || '0', 10);
-    if (restaurantId) loadAdminsForRestaurant(restaurantId);
-    toast(active ? 'Restore Access' : 'Revoke Access');
-  } catch (e) {
-    toast('Failed', 'error');
-  }
+function populateRestaurantSelect() {
+  const s = document.getElementById('adminRestaurant');
+  if (!s) return;
+  s.innerHTML = rCache.map(r => `<option value="${r.id}">${esc(r.name||'Unnamed')}</option>`).join('');
 }
 
 async function addRestaurant() {
   const name = document.getElementById('rname').value.trim();
-  const phone = document.getElementById('rphone').value.trim();
-  const prompt = document.getElementById('rprompt').value.trim();
-  if (!name) { toast('Restaurant name is required', 'error'); return; }
+  if (!name) { toast('Name is required', 'err'); return; }
   try {
-    await apiFetch(`${API_BASE}/restaurants/add`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, phone, ivr_text: prompt })
+    await api(`${API_BASE}/restaurants/add`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ name, phone:document.getElementById('rphone').value.trim(), ivr_text:document.getElementById('rprompt').value })
     });
     ['rname','rphone','rprompt'].forEach(id => document.getElementById(id).value = '');
-    toast(`"${name}" added successfully`);
+    toast(`"${name}" added ✓`);
     loadRestaurants();
-  } catch(e) { toast('Failed to add restaurant', 'error'); }
+  } catch { toast('Failed to add', 'err'); }
 }
 
-async function updateRestaurant(id) {
-  const name = document.getElementById(`rname-${id}`).value.trim();
-  const phone = document.getElementById(`rphone-${id}`).value.trim();
-  const prompt = document.getElementById(`rprompt-${id}`).value;
+function toggleCreate() {
+  const b = document.getElementById('createBox');
+  b.style.display = b.style.display==='none' ? 'block' : 'none';
+}
+
+async function updateR(id) {
   try {
-    await apiFetch(`${API_BASE}/restaurants/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, phone, ivr_text: prompt })
+    await api(`${API_BASE}/restaurants/${id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        name:   document.getElementById(`rn-${id}`).value.trim(),
+        phone:  document.getElementById(`rp-${id}`).value.trim(),
+        ivr_text: document.getElementById(`rpr-${id}`).value
+      })
     });
-    toast('Restaurant updated');
+    toast('Saved ✓');
     loadRestaurants();
-  } catch(e) { toast('Update failed', 'error'); }
+  } catch { toast('Save failed', 'err'); }
 }
 
-function openRestaurant(id, silent) {
-  selectedId = id;
-  const r = restaurantsCache.find(x => x.id === id);
-  if (!r) return;
-
-  const isAdmin = !!currentUser?.is_admin;
-  const isActive = r.active;
-  const activeLabel = isActive ? t('Active') : t('Inactive');
-  const toggleLabel = isActive ? `⏸ ${t('Deactivate')}` : `▶ ${t('Activate')}`;
-  const adminActions = isAdmin ? `
-        <button class="btn btn-secondary btn-sm" onclick="toggleRestaurant(${r.id})">${toggleLabel}</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteRestaurant(${r.id})">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          ${t('Delete')}
-        </button>` : ``;
-
-  document.getElementById('rdetail').innerHTML = `
-    <div class="card">
-      <div class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>
-        ${esc(r.name || 'Unnamed')}
-        <span class="badge ${isActive ? 'badge-green' : 'badge-red'}" style="margin-inline-start:auto">${activeLabel}</span>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">${t('Name')}</label>
-          <input id="rname-${r.id}" value="${esc(r.name||'')}" placeholder="${t('Restaurant Name')}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">${t('Phone')}</label>
-          <input id="rphone-${r.id}" value="${esc(r.phone||'')}" placeholder="+1 (555) 000-0000">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">${t('IVR Prompt')}</label>
-        <textarea id="rprompt-${r.id}">${esc(r.ivr_text||'')}</textarea>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary btn-sm" onclick="updateRestaurant(${r.id})">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
-          ${t('Save')}
-        </button>
-        ${adminActions}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-title">${t('Text Chat')}</div>
-      <div class="chat-box" id="chat"></div>
-      <div class="chat-input-row">
-        <input id="chatMsg" placeholder="${t('Test the AI assistant...')}" onkeydown="if(event.key==='Enter')sendChat()">
-        <button class="btn btn-primary btn-sm" onclick="sendChat()">${t('Send')}</button>
-      </div>
-    </div>
-
-    ${isAdmin ? `
-    <div class="card">
-      <div class="section-title">${t('Admins for this restaurant')}</div>
-      <div id="adminList" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>` : ``}
-
-    <div class="card">
-      <div class="section-title">${t('Voice Chat')}</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${t('Voice Chat desc')}</p>
-      <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎙️ ${t('Start Voice Session')}</button>
-    </div>
- 
-    <div class="card">
-      <div class="section-title">${t('Twilio Webhook')}</div>
-      <div class="form-group">
-        <label class="form-label">${t('Twilio Webhook URL')}</label>
-        <div class="twilio-row">
-          <input id="twilioUrl" readonly value="${esc(buildTwilioUrl(r.id))}">
-          <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">${t('Copy')}</button>
-        </div>
-      </div>
-      <span data-i18n="Tips">${t('Tips')}</span>
-      <p style="font-size:13px;color:var(--muted);line-height:1.6">${t('Twilio guide')}</p>
-    </div>
-   
-
-  `;
-  setVoiceButtonState(voiceSession.active);
-  
-  if (isAdmin) loadAdminsForRestaurant(r.id);
-
-  if (!silent) loadRestaurants();
-}
-
-async function toggleRestaurant(id) {
+async function toggleR(id) {
   try {
-    await apiFetch(`${API_BASE}/restaurants/toggle/${id}`, { method: 'POST' });
+    await api(`${API_BASE}/restaurants/toggle/${id}`, { method:'POST' });
     toast('Status updated');
     loadRestaurants();
-  } catch(e) { toast('Failed', 'error'); }
+  } catch { toast('Failed', 'err'); }
 }
 
-function showAssignForRestaurant(id) {
-  if (!currentUser?.is_admin) return;
+async function deleteR(id) {
+  if (!confirm('Delete this restaurant? This cannot be undone.')) return;
+  try {
+    await api(`${API_BASE}/restaurants/${id}`, { method:'DELETE' });
+    selId = null;
+    toast('Deleted');
+    loadRestaurants();
+    document.getElementById('rdetail').innerHTML = `
+      <div class="card" style="text-align:center;padding:60px 24px">
+        <div style="font-size:42px;margin-bottom:12px;opacity:.18">👆</div>
+        <div style="color:var(--text3);font-size:14px">Select a restaurant to manage it</div>
+      </div>`;
+  } catch { toast('Delete failed', 'err'); }
+}
+
+function showAssign(id) {
   const box = document.getElementById('assignBox');
-  const isSameRestaurant = assignBoxRestaurantId === id;
-
-  if (assignBoxOpenedByIcon && isSameRestaurant) {
-    assignBoxOpenedByIcon = false;
-    assignBoxRestaurantId = null;
-    if (box) box.style.display = 'none';
-    return;
+  if (assignOpen && assignRid === id) {
+    assignOpen = false; assignRid = null;
+    box.style.display = 'none'; return;
   }
-
-  assignBoxOpenedByIcon = true;
-  assignBoxRestaurantId = id;
+  assignOpen = true; assignRid = id;
   const sel = document.getElementById('adminRestaurant');
   if (sel) sel.value = String(id);
-  if (box) box.style.display = 'block';
-  const email = document.getElementById('adminEmail');
-  if (email) email.focus();
-  loadAdminsForRestaurant(id);
+  box.style.display = 'block';
+  loadAdminsFor(id);
 }
 
 async function createOrAssignAdmin() {
-  if (!currentUser?.is_admin) return;
+  if (!me?.is_admin) return;
   const email = document.getElementById('adminEmail').value.trim();
-  const password = document.getElementById('adminPassword').value;
-  const restaurantId = parseInt(document.getElementById('adminRestaurant').value, 10);
-  if (!email || !restaurantId) { toast('Failed', 'error'); return; }
+  const pass  = document.getElementById('adminPassword').value;
+  const rid   = parseInt(document.getElementById('adminRestaurant').value, 10);
+  if (!email || !rid) { toast('Fill in email and select restaurant', 'err'); return; }
 
-  const clearForm = () => {
-    document.getElementById('adminEmail').value = '';
-    document.getElementById('adminPassword').value = '';
-  };
-
-  const assignExisting = async () => {
-    const res = await apiFetch(`${API_BASE}/auth/users/assign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, restaurant_id: restaurantId })
+  const assign = async () => {
+    const r = await api(`${API_BASE}/auth/users/assign`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email, restaurant_id:rid })
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'assign failed');
-    }
-    toast('Admin assigned');
-    clearForm();
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail||'assign failed'); }
   };
 
   try {
-    if (!password) {
-      await assignExisting();
-      return;
-    }
-
-    const res = await apiFetch(`${API_BASE}/auth/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, restaurant_id: restaurantId })
+    if (!pass) { await assign(); toast('Admin assigned ✓'); document.getElementById('adminEmail').value=''; return; }
+    const r = await api(`${API_BASE}/auth/users`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ email, password:pass, restaurant_id:rid })
     });
-    if (res.ok) {
-      toast('Admin assigned');
-      clearForm();
-      return;
-    }
-    const err = await res.json().catch(() => ({}));
-    if (res.status === 409) {
-      await assignExisting();
-      return;
-    }
-    throw new Error(err.detail || 'create failed');
-  } catch (e) {
-    toast(e.message || 'Failed', 'error');
-  }
+    if (r.ok) { toast('Admin created & assigned ✓'); document.getElementById('adminEmail').value=''; document.getElementById('adminPassword').value=''; return; }
+    const e = await r.json().catch(()=>({}));
+    if (r.status===409) { await assign(); toast('Admin assigned ✓'); return; }
+    throw new Error(e.detail||'failed');
+  } catch(e) { toast(e.message||'Failed', 'err'); }
 }
 
-async function deleteRestaurant(id) {
-  if (!confirm(t('Delete this restaurant? This cannot be undone.'))) return;
+async function loadAdminsFor(rid) {
+  const box = document.getElementById('adminList');
+  if (!box) return;
+  box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">Loading...</div>`;
   try {
-    await apiFetch(`${API_BASE}/restaurants/${id}`, { method: 'DELETE' });
-    selectedId = null;
-    toast('Restaurant deleted');
-    loadRestaurants();
-    document.getElementById('rdetail').innerHTML = `
-      <div class="card" style="text-align:center;padding:60px 20px">
-        <div style="font-size:40px;margin-bottom:12px;opacity:0.25">👆</div>
-        <div style="color:var(--muted);font-size:14px">${t('Select a restaurant to manage it')}</div>
-      </div>`;
-  } catch(e) { toast('Delete failed', 'error'); }
+    const data = await (await api(`${API_BASE}/auth/users/by-restaurant/${rid}`)).json();
+    uCache = data;
+    if (!data.length) { box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">No admins assigned yet</div>`; return; }
+    box.innerHTML = data.map(u => `
+      <div class="admin-user-row">
+        <div class="admin-user-info">
+          <div class="admin-user-email">${esc(u.email)}</div>
+          <div class="admin-user-status">${u.active ? '● Active' : '○ Inactive'}</div>
+        </div>
+        <div class="admin-user-btns">
+          <button class="btn btn-secondary btn-xs" onclick="openEditUser(${u.id})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            Edit
+          </button>
+          <button class="btn ${u.active ? 'btn-danger' : 'btn-success'} btn-xs" onclick="setUserStatus(${u.id},${!u.active})">
+            ${u.active ? 'Revoke' : 'Restore'}
+          </button>
+          <button class="btn btn-danger btn-xs" onclick="deleteUser(${u.id})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </div>`).join('');
+  } catch { box.innerHTML = `<div style="color:var(--red);font-size:13px">Failed to load admins</div>`; }
+}
+
+function openEditUser(uid) {
+  const u = uCache.find(x => x.id===uid);
+  if (!u) return;
+  editUid = uid;
+  document.getElementById('editEmail').value    = u.email||'';
+  document.getElementById('editPassword').value = '';
+  document.getElementById('editErr').textContent = '';
+  document.getElementById('editUserOverlay').classList.remove('hidden');
+  document.getElementById('editEmail').focus();
+}
+
+function closeEditUser() {
+  editUid = null;
+  document.getElementById('editUserOverlay').classList.add('hidden');
+  document.getElementById('editErr').textContent = '';
+}
+
+document.getElementById('editUserOverlay').addEventListener('click', e => {
+  if (e.target.id==='editUserOverlay') closeEditUser();
+});
+
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeEditUser(); });
+
+document.getElementById('editPassword').addEventListener('keydown', e => { if (e.key==='Enter') saveEditUser(); });
+
+async function saveEditUser() {
+  if (!editUid) return;
+  const email = document.getElementById('editEmail').value.trim().toLowerCase();
+  const pass  = document.getElementById('editPassword').value.trim();
+  const err   = document.getElementById('editErr');
+  if (!email || !email.includes('@')) { err.textContent='Invalid email'; return; }
+  if (pass && pass.length<6) { err.textContent='Password must be 6+ characters'; return; }
+  const payload = { email };
+  if (pass) payload.password = pass;
+  try {
+    const r = await api(`${API_BASE}/auth/users/${editUid}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if (!r.ok) { const e=await r.json().catch(()=>({})); throw new Error(e.detail||'Failed'); }
+    closeEditUser();
+    const rid = selId || parseInt(document.getElementById('adminRestaurant')?.value||'0',10);
+    if (rid) loadAdminsFor(rid);
+    toast('User updated ✓');
+  } catch(e) { err.textContent = e.message||'Failed'; }
+}
+
+async function deleteUser(uid) {
+  if (!confirm('Delete this user? This cannot be undone.')) return;
+  try {
+    const r = await api(`${API_BASE}/auth/users/${uid}`, { method:'DELETE' });
+    if (!r.ok) throw new Error();
+    const rid = selId || parseInt(document.getElementById('adminRestaurant')?.value||'0',10);
+    if (rid) loadAdminsFor(rid);
+    toast('User deleted');
+  } catch { toast('Delete failed', 'err'); }
+}
+
+async function setUserStatus(uid, active) {
+  try {
+    await api(`${API_BASE}/auth/users/${uid}/status`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ active })
+    });
+    const rid = selId || parseInt(document.getElementById('adminRestaurant')?.value||'0',10);
+    if (rid) loadAdminsFor(rid);
+    toast(active ? 'Access restored' : 'Access revoked');
+  } catch { toast('Failed', 'err'); }
+}
+
+function buildTwilioUrl(id) {
+  const base = String(localStorage.getItem('twilioBaseUrl')||'').trim().replace(/\/+$/,'') || API_BASE;
+  const clean = base.replace(/\/incoming-call(?:\/\d+)?(?:\?.*)?$/i,'');
+  return `${clean}/incoming-call/${id}`;
 }
 
 function copyTwilioUrl() {
   const el = document.getElementById('twilioUrl');
   navigator.clipboard.writeText(el.value)
-    .then(() => toast('Twilio URL copied'))
-    .catch(() => toast('Copy failed', 'error'));
+    .then(() => toast('URL copied ✓'))
+    .catch(() => toast('Copy failed', 'err'));
 }
 
-function setVoiceButtonState(active) {
-  const btn = document.getElementById('voiceBtn');
-  if (!btn) return;
-  btn.textContent = active ? `🔴 ${t('End Voice Session')}` : `🎙️ ${t('Start Voice Session')}`;
-  btn.classList.toggle('active', !!active);
-  btn.disabled = false;
+function setVoiceBtnState(on) {
+  const b = document.getElementById('voiceBtn');
+  if (!b) return;
+  b.textContent = on ? '⏹ End Voice Session' : '🎙️ Start Voice Session';
+  b.classList.toggle('active', on);
+  b.disabled = false;
 }
 
 function stopVoice() {
-  try {
-    voiceSession.pc?.getSenders()?.forEach(sender => sender.track?.stop());
-  } catch (e) {}
-  try {
-    voiceSession.localStream?.getTracks()?.forEach(track => track.stop());
-  } catch (e) {}
-  try {
-    voiceSession.dc?.close();
-  } catch (e) {}
-  try {
-    voiceSession.pc?.close();
-  } catch (e) {}
-  if (voiceSession.audioEl) {
-    voiceSession.audioEl.srcObject = null;
-    voiceSession.audioEl.remove();
-  }
-  voiceSession = { pc: null, localStream: null, audioEl: null, dc: null, active: false };
-  resetOrderCapture();
-  setVoiceButtonState(false);
+  try { vs.pc?.getSenders()?.forEach(s => s.track?.stop()); } catch {}
+  try { vs.stream?.getTracks()?.forEach(t => t.stop()); } catch {}
+  try { vs.dc?.close(); } catch {}
+  try { vs.pc?.close(); } catch {}
+  if (vs.audio) { vs.audio.srcObject=null; vs.audio.remove(); }
+  vs = { pc:null, stream:null, audio:null, dc:null, on:false };
+  resetOC();
+  setVoiceBtnState(false);
 }
 
-// ─── CHAT ────────────────────────────────────────────────────────────────────
-async function sendChat() {
-  if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
-  const msg = document.getElementById('chatMsg').value.trim();
-  if (!msg) return;
-  const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
-  const chatEl = document.getElementById('chat');
-
-  chatEl.innerHTML += `<div class="chat-msg user"><div class="sender">${t('You')}</div><div class="bubble">${esc(msg)}</div></div>`;
-  document.getElementById('chatMsg').value = '';
-  chatEl.scrollTop = chatEl.scrollHeight;
-
-  const typingId = 'typing-' + Date.now();
-  chatEl.innerHTML += `<div class="chat-msg ai" id="${typingId}"><div class="sender">${t('AI')}</div><div class="bubble"><span class="loading"></span></div></div>`;
-  chatEl.scrollTop = chatEl.scrollHeight;
-
-  try {
-    const r = await apiFetch(`${API_BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, restaurant_prompt: prompt })
-    });
-    const data = await r.json();
-    if (!r.ok || !data.reply) throw new Error('chat failed');
-    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">${t('AI')}</div><div class="bubble">${esc(data.reply)}</div></div>`;
-  } catch(e) {
-    document.getElementById(typingId).outerHTML = `<div class="chat-msg ai"><div class="sender">${t('AI')}</div><div class="bubble" style="color:var(--red)">${t('Server error, we will fix soon.')}</div></div>`;
-  }
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-// ─── VOICE ───────────────────────────────────────────────────────────────────
 async function startVoice() {
-  if (voiceSession.active) { stopVoice(); return; }
-  if (!selectedId) { toast('Select a restaurant first', 'error'); return; }
+  if (vs.on) { stopVoice(); return; }
+  if (!selId) { toast('Select a restaurant first', 'err'); return; }
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-    toast('Voice requires HTTPS', 'error'); return;
+    toast('Voice requires HTTPS', 'err'); return;
   }
-  resetOrderCapture();
-  const prompt = document.getElementById(`rprompt-${selectedId}`)?.value || '';
+  resetOC();
+  const prompt = document.getElementById(`rpr-${selId}`)?.value || '';
   const btn = document.getElementById('voiceBtn');
   if (btn) btn.disabled = true;
   try {
-    const session = await (await apiFetch(`${API_BASE}/voice-session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurant_prompt: prompt })
+    const session = await (await api(`${API_BASE}/voice-session`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ restaurant_prompt:prompt })
     })).json();
-    if (!session.client_secret?.value) { toast('Voice session error', 'error'); return; }
+    if (!session.client_secret?.value) { toast('Voice session error', 'err'); return; }
 
     const pc = new RTCPeerConnection();
     const dc = pc.createDataChannel('oai-events');
-    dc.onmessage = e => handleRealtimeEventMessage(e.data);
-    dc.onopen = () => {
-      try {
-        dc.send(JSON.stringify({
-          type: 'session.update',
-          session: { output_modalities: ['audio'] }
-        }));
-      } catch (e) {}
-    };
-    const audioEl = document.createElement('audio');
-    audioEl.autoplay = true;
-    pc.ontrack = e => audioEl.srcObject = e.streams[0];
-    const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    dc.onmessage = e => handleRTEvent(e.data);
+
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    pc.ontrack = e => audio.srcObject = e.streams[0];
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const realtimeModel = session.model || 'gpt-4o-realtime-preview';
-    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(realtimeModel)}`, {
-      method: 'POST', body: offer.sdp,
-      headers: { Authorization: `Bearer ${session.client_secret.value}`, 'Content-Type': 'application/sdp' }
+
+    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(session.model||'gpt-4o-realtime-preview')}`, {
+      method:'POST', body:offer.sdp,
+      headers:{ Authorization:`Bearer ${session.client_secret.value}`, 'Content-Type':'application/sdp' }
     });
     if (!sdpRes.ok) throw new Error('sdp failed');
-    const answerSdp = await sdpRes.text();
-    if (!answerSdp) throw new Error('sdp answer missing');
-    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    const sdp = await sdpRes.text();
+    if (!sdp) throw new Error('empty sdp');
+    await pc.setRemoteDescription({ type:'answer', sdp });
 
-    voiceSession = { pc, localStream, audioEl, dc, active: true };
+    vs = { pc, stream, audio, dc, on:true };
     pc.onconnectionstatechange = () => {
-      if (voiceSession.pc !== pc) return;
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) stopVoice();
+      if (vs.pc !== pc) return;
+      if (['failed','disconnected','closed'].includes(pc.connectionState)) stopVoice();
     };
-    setVoiceButtonState(true);
+    setVoiceBtnState(true);
     toast('Voice session started');
-  } catch(e) {
-    stopVoice();
-    toast('Voice session error', 'error');
-  } finally {
-    const activeBtn = document.getElementById('voiceBtn');
-    if (activeBtn) activeBtn.disabled = false;
-  }
+  } catch { stopVoice(); toast('Voice session error', 'err'); }
+  finally { document.getElementById('voiceBtn')?.removeAttribute('disabled'); }
 }
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
-// Apply saved language on load
-refreshSidebarNavTitles();
-applySidebarState();
-if (currentLang === 'he') setLang('he');
+// ─── RESTAURANT DETAIL ───────────────────────────────────────────────────────
+function openR(id, silent) {
+  selId = id;
+  const r = rCache.find(x => x.id===id);
+  if (!r) return;
 
-checkAuth().then(ok => {
-  if (ok) initAfterAuth();
-});
+  const admin  = !!me?.is_admin;
+  const active = r.active;
+
+  document.getElementById('rdetail').innerHTML = `
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">🍽️</div>
+        <div class="card-title">${esc(r.name||'Unnamed')}</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <span class="badge ${active?'badge-green':'badge-red'}">${active?'Active':'Inactive'}</span>
+          ${admin ? `
+          <button class="btn btn-secondary btn-sm" onclick="toggleR(${r.id})">${active?'⏸ Deactivate':'▶ Activate'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteR(${r.id})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete
+          </button>` : ''}
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input id="rn-${r.id}" value="${esc(r.name||'')}" placeholder="Restaurant Name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input id="rp-${r.id}" value="${esc(r.phone||'')}" placeholder="+1 (555) 000-0000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">IVR Prompt</label>
+        <textarea id="rpr-${r.id}">${esc(r.ivr_text||'')}</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="updateR(${r.id})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
+          Save Changes
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">💬</div>
+        <div class="card-title">Test Chat</div>
+      </div>
+      <div class="chat-box" id="chat"></div>
+      <div class="chat-row">
+        <input id="chatIn" placeholder="Type a message to test the AI..." onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
+      </div>
+    </div>
+
+    ${admin ? `
+    <div class="card">
+      <div class="section-lbl">Admins for this restaurant</div>
+      <div id="adminList"></div>
+    </div>` : ''}
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">🎙️</div>
+        <div class="card-title">Voice Test</div>
+      </div>
+      <p style="font-size:13.5px;color:var(--text2);margin-bottom:10px;line-height:1.6">
+        Start a real-time voice session directly in your browser to test the AI receptionist.
+        Requires HTTPS and microphone permission.
+      </p>
+      <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎙️ Start Voice Session</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">📡</div>
+        <div class="card-title">Twilio Webhook</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Webhook URL — paste this into Twilio</label>
+        <div class="twilio-row">
+          <input id="twilioUrl" readonly value="${esc(buildTwilioUrl(r.id))}">
+          <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">Copy</button>
+        </div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text3);line-height:1.7;margin-top:10px">
+        Go to <strong style="color:var(--text2)">Twilio Console → Phone Numbers → Active Numbers</strong>,
+        select your number, set <em>Voice → A Call Comes In</em> to <strong style="color:var(--text2)">Webhook</strong>,
+        paste the URL above, and save with <strong style="color:var(--text2)">HTTP POST</strong>.
+      </p>
+    </div>
+  `;
+
+  setVoiceBtnState(vs.on);
+  if (admin) loadAdminsFor(r.id);
+  if (!silent) loadRestaurants();
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────────────────────
+async function sendChat() {
+  if (!selId) { toast('Select a restaurant first', 'err'); return; }
+  const msg = document.getElementById('chatIn').value.trim();
+  if (!msg) return;
+  const prompt = document.getElementById(`rpr-${selId}`)?.value || '';
+  const chat = document.getElementById('chat');
+  chat.innerHTML += `<div class="msg user"><div class="msg-sender">You</div><div class="msg-bubble">${esc(msg)}</div></div>`;
+  document.getElementById('chatIn').value = '';
+  chat.scrollTop = chat.scrollHeight;
+  const tid = 'typing-' + Date.now();
+  chat.innerHTML += `<div class="msg ai" id="${tid}"><div class="msg-sender">AI</div><div class="msg-bubble"><span class="spin"></span></div></div>`;
+  chat.scrollTop = chat.scrollHeight;
+  try {
+    const r = await api(`${API_BASE}/chat`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ message:msg, restaurant_prompt:prompt })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.reply) throw new Error();
+    document.getElementById(tid).outerHTML = `<div class="msg ai"><div class="msg-sender">AI</div><div class="msg-bubble">${esc(d.reply)}</div></div>`;
+  } catch {
+    document.getElementById(tid).outerHTML = `<div class="msg ai"><div class="msg-sender">AI</div><div class="msg-bubble" style="color:var(--red)">Server error — please try again</div></div>`;
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  if (inited) return;
+  inited = true;
+  await Promise.allSettled([loadGlobal(), loadRestaurants(), loadStats(), loadLogs()]);
+}
+
+// Apply sidebar state
+if (collapsed) document.body.classList.add('collapsed');
+
+// Apply language
+if (lang !== 'en') setLang(lang);
+
+// Init
+checkAuth().then(ok => { if (ok) boot(); });
 </script>
 </body>
 </html>
