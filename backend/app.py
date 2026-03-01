@@ -12,7 +12,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Hangup
@@ -37,13 +37,10 @@ OPENAI_API_KEY           = os.getenv("OPENAI_API_KEY")
 PORT                     = int(os.getenv("PORT", 5050))
 REALTIME_MODEL           = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview")
 TEMPERATURE              = float(os.getenv("TEMPERATURE", 0.6))
-VOICE                    = os.getenv("VOICE", "shimmer")
+VOICE                    = os.getenv("VOICE", "alloy")
 LOG_LEVEL                = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
-
-# Set REALTIME_LOG_EVERY_EVENT=true in .env to see every OpenAI event in logs
 REALTIME_LOG_EVERY_EVENT = _env_bool("REALTIME_LOG_EVERY_EVENT", False)
 
-# VAD — 0.7 ignores horns and background noise
 TURN_DETECTION_THRESHOLD      = float(os.getenv("TURN_DETECTION_THRESHOLD", 0.7))
 TURN_DETECTION_SILENCE_MS     = int(os.getenv("TURN_DETECTION_SILENCE_MS", 600))
 TURN_DETECTION_PREFIX_MS      = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
@@ -53,12 +50,13 @@ TURN_DETECTION_INTERRUPT_RESPONSE = _env_bool("TURN_DETECTION_INTERRUPT_RESPONSE
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
 
-# This exact string is what we scan for in the model output
 ORDER_JSON_MARKER = "ORDER_JSON:"
 
 BASE_DIR        = Path(__file__).resolve().parent
 PROMPT_DIR      = BASE_DIR / "prompts"
 RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
+FRONTEND_DIR    = BASE_DIR.parent / "frontend"
+DASHBOARD_FILE  = FRONTEND_DIR / "dashboard.html"
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI()
@@ -86,6 +84,12 @@ app.include_router(call_logs.router,   dependencies=[Depends(require_auth)])
 app.include_router(orders.router,      dependencies=[Depends(require_auth)])
 app.include_router(dashboard.router,   dependencies=[Depends(require_auth)])
 app.include_router(prompt.router,      dependencies=[Depends(require_auth)])
+app.include_router(auth_routes.router, prefix="/api")
+app.include_router(restaurant.router,  prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(call_logs.router,   prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(orders.router,      prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(dashboard.router,   prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(prompt.router,      prefix="/api", dependencies=[Depends(require_auth)])
 
 if not OPENAI_API_KEY:
     raise ValueError("Missing OPENAI_API_KEY in .env")
@@ -106,56 +110,8 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     addon = (restaurant_prompt or "").strip()
     base  = f"{global_prompt}\n\n{addon}" if addon else global_prompt
 
-    # ── CRYSTAL CLEAR reservation instructions ─────────────────────────────────
-    # The model MUST output "ORDER_JSON: {...}" as literal text in its response.
-    # This text goes into the text modality. We scan for it and save to DB.
-    # The model must NOT skip this step or the reservation will not be saved.
     reservation_instructions = """\
 
-=== RESERVATION INSTRUCTIONS — FOLLOW EXACTLY ===
-
-You take restaurant reservations over the phone.
-
-STEP 1 — GREET
-  Say hello and ask how you can help.
-
-STEP 2 — COLLECT INFO (one question at a time, wait for answer before next)
-  Collect these fields in order:
-    a) Guest full name
-    b) Date of arrival (e.g. "15 March" or "March 15")
-    c) Time of arrival (e.g. "7 PM" or "19:00")
-    d) Number of people (must be a number, e.g. 2)
-    e) Contact phone number
-
-STEP 3 — CONFIRM WITH CALLER
-  Read back all details and ask the caller to confirm everything is correct.
-
-STEP 4 — OUTPUT THE DATA LINE (MANDATORY — DO NOT SKIP)
-  After caller confirms, you MUST write this exact line in your response
-  (the caller cannot hear this line, it is for the system):
-
-  ORDER_JSON: {"full_name": "Ali Khan", "date-arrival": "15 March", "time_arrival": "7 PM", "total_peoples": 2, "contact_number": "03001234567"}
-
-  Replace the example values with the real values from the caller.
-  Rules for the JSON:
-    - total_peoples must be a plain integer (2), NOT a string ("2")
-    - All other values are strings
-    - Use exactly these key names: full_name, date-arrival, time_arrival, total_peoples, contact_number
-    - Write it as ONE line starting with exactly: ORDER_JSON:
-
-STEP 5 — VERBAL CONFIRMATION
-  Say: "Your reservation is confirmed. We look forward to seeing you. Goodbye!"
-
-STEP 6 — END MARKER (MANDATORY — DO NOT SKIP)
-  After the verbal confirmation, write this exact token on its own line:
-  <hangup>
-
-=== IMPORTANT RULES ===
-- You MUST complete Steps 4, 5, and 6 before the conversation ends.
-- Do NOT say "ORDER_JSON" or "<hangup>" out loud to the caller.
-- Do NOT skip Step 4 even if the caller seems satisfied.
-- Do NOT end the call before saying the verbal confirmation in Step 5.
-- Speak naturally and warmly. Short sentences. One question at a time.
 """
 
     return f"{base}\n{reservation_instructions}"
@@ -236,7 +192,7 @@ def save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw
         db.close()
 
 
-# ── OpenAI connectivity ────────────────────────────────────────────────────────
+# ── OpenAI helpers ─────────────────────────────────────────────────────────────
 def log_openai_status(ctx: str, ok: bool, detail: str = ""):
     print(f"[OPENAI][{ctx}] {'WORKING' if ok else 'NOT WORKING'}{' | ' + detail if detail else ''}")
 
@@ -280,7 +236,7 @@ def complete_twilio_call(call_sid: str) -> bool:
         return False
 
 
-# ── Order JSON parsing ─────────────────────────────────────────────────────────
+# ── Order JSON helpers ─────────────────────────────────────────────────────────
 def _clean(v) -> str:
     if v is None:
         return ""
@@ -332,17 +288,11 @@ def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
 
 
 def parse_order_json(text: str) -> dict | None:
-    """
-    Find ORDER_JSON: in text and extract the JSON object after it.
-    Returns None if not found or JSON is incomplete.
-    """
     idx = text.find(ORDER_JSON_MARKER)
     if idx < 0:
         return None
 
     tail = text[idx + len(ORDER_JSON_MARKER):].lstrip(" \t\n:")
-
-    # Strip markdown code fences if model wrapped it
     if tail.startswith("```"):
         nl   = tail.find("\n")
         tail = tail[nl + 1:] if nl != -1 else tail[3:]
@@ -363,30 +313,18 @@ def parse_order_json(text: str) -> dict | None:
                 break
 
     if end == -1:
-        return None  # JSON not complete yet
+        return None
 
-    json_str = tail[start: end + 1]
     try:
-        return json.loads(json_str)
+        return json.loads(tail[start: end + 1])
     except ValueError as exc:
-        logger.warning("[ORDER] JSON parse error: %s  raw=%r", exc, json_str[:300])
+        logger.warning("[ORDER] JSON parse error: %s  raw=%r", exc, tail[start: end + 1][:300])
         return None
 
 
-# ── Text extractor from OpenAI Realtime events ────────────────────────────────
 def texts_from_event(ev: dict) -> list[str]:
-    """
-    Extract every text string from any OpenAI Realtime event.
-    ORDER_JSON is output in the TEXT modality. It can appear in:
-      - response.text.delta        (streaming chunk)
-      - response.text.done         (complete text item)
-      - response.output_item.done  (item content array)
-      - response.done              (full output array)
-    We collect from all of these to guarantee we never miss it.
-    """
     if not isinstance(ev, dict):
         return []
-    # Audio delta events never carry text — skip for performance
     if ev.get("type") in {"response.output_audio.delta", "response.audio.delta"}:
         return []
 
@@ -396,13 +334,11 @@ def texts_from_event(ev: dict) -> list[str]:
         if isinstance(v, str) and v:
             out.append(v)
 
-    # Top-level fields
     for k in ("delta", "text", "transcript"):
         add(ev.get(k))
 
-    # Nested item / response objects
-    for container_key in ("item", "response"):
-        obj = ev.get(container_key)
+    for ck in ("item", "response"):
+        obj = ev.get(ck)
         if not isinstance(obj, dict):
             continue
         for k in ("text", "transcript"):
@@ -412,10 +348,8 @@ def texts_from_event(ev: dict) -> list[str]:
                 for k in ("text", "transcript"):
                     add(part.get(k))
 
-    # response.done — most complete source, has full output array
     if ev.get("type") == "response.done":
-        resp_obj = ev.get("response") or {}
-        for item in resp_obj.get("output") or []:
+        for item in (ev.get("response") or {}).get("output") or []:
             if not isinstance(item, dict):
                 continue
             for part in item.get("content") or []:
@@ -435,6 +369,7 @@ async def startup_event():
 
 
 @app.get("/health/openai", response_class=JSONResponse)
+@app.get("/api/health/openai", response_class=JSONResponse)
 async def health_openai():
     ok, detail = check_openai_connectivity()
     log_openai_status("health", ok, detail)
@@ -446,9 +381,19 @@ async def index_page():
     return {"status": "running"}
 
 
+@app.get("/dashboard")
+@app.get("/dashboard.html")
+async def dashboard_page():
+    if not DASHBOARD_FILE.exists():
+        raise HTTPException(status_code=404, detail="dashboard.html not found")
+    return FileResponse(DASHBOARD_FILE)
+
+
 # ── Twilio webhook ─────────────────────────────────────────────────────────────
-@app.api_route("/incoming-call",                 methods=["GET", "POST"])
-@app.api_route("/incoming-call/{restaurant_id}", methods=["GET", "POST"])
+@app.api_route("/incoming-call",                     methods=["GET", "POST"])
+@app.api_route("/incoming-call/{restaurant_id}",     methods=["GET", "POST"])
+@app.api_route("/api/incoming-call",                 methods=["GET", "POST"])
+@app.api_route("/api/incoming-call/{restaurant_id}", methods=["GET", "POST"])
 async def incoming_call(request: Request, restaurant_id: int | None = None):
     if restaurant_id is None:
         q = request.query_params.get("restaurant_id")
@@ -484,6 +429,7 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
 # ── REST endpoints ─────────────────────────────────────────────────────────────
 @app.post("/chat")
+@app.post("/api/chat")
 async def chat_with_ai(data: dict, user=Depends(require_auth)):
     restaurant_id = data.get("restaurant_id")
     r_prompt      = data.get("restaurant_prompt")
@@ -525,6 +471,7 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
 
 
 @app.post("/orders/ingest")
+@app.post("/api/orders/ingest")
 async def ingest_order(data: dict, user=Depends(require_auth)):
     restaurant_id = data.get("restaurant_id")
     if not user.is_admin:
@@ -555,6 +502,7 @@ async def ingest_order(data: dict, user=Depends(require_auth)):
 
 
 @app.api_route("/voice-session", methods=["GET", "POST"])
+@app.api_route("/api/voice-session", methods=["GET", "POST"])
 def create_voice_session(request: Request, data: dict | None = None, user=Depends(require_auth)):
     data          = data or {}
     restaurant_id = data.get("restaurant_id") or request.query_params.get("restaurant_id")
@@ -590,10 +538,6 @@ def create_voice_session(request: Request, data: dict | None = None, user=Depend
 
 # ── Realtime session init ──────────────────────────────────────────────────────
 async def init_session(openai_ws, instructions: str):
-    """
-    Send session config then immediately trigger the opening greeting.
-    No fake user message — the model greets because instructions say so.
-    """
     await openai_ws.send(json.dumps({
         "type": "session.update",
         "session": {
@@ -614,7 +558,6 @@ async def init_session(openai_ws, instructions: str):
             },
         },
     }))
-    # Trigger greeting immediately — model knows to greet from instructions
     await openai_ws.send(json.dumps({"type": "response.create"}))
 
 
@@ -628,8 +571,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
     caller          = websocket.query_params.get("caller") or "Unknown"
     call_sid        = websocket.query_params.get("call_sid") or ""
 
-    # ── DEBUG: log the full prompt so we can confirm it's correct ─────────────
-    logger.info("[PROMPT] Full instructions being sent to OpenAI:\n%s", instructions)
+    logger.info("[PROMPT] Sending to OpenAI:\n%s", instructions)
 
     try:
         async with websockets.connect(
@@ -644,7 +586,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             logger.info("[OPENAI] ▶ Realtime WS connected")
             await init_session(openai_ws, instructions)
 
-            # ── Per-call state (all local — no shared globals) ─────────────────
             stream_sid          = None
             last_assistant_item = None
             response_active     = False
@@ -653,12 +594,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             logged              = False
             call_ending         = False
 
-            # Accumulates ALL text output from the model for this call
             full_text   = ""
             order_saved = False
-
-            # After ORDER_JSON is detected and saved, this is set True.
-            # The next response.done triggers the hangup (= after confirmation).
             arm_hangup  = False
 
             def log_call():
@@ -711,33 +648,26 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         pass
 
             def try_save() -> bool:
-                """
-                Attempt to parse ORDER_JSON from full_text and save to DB.
-                Returns True if saved. Called on every new text chunk.
-                """
                 nonlocal order_saved
-
                 if order_saved:
                     return True
-
                 if ORDER_JSON_MARKER not in full_text:
                     return False
 
-                # Always log around the marker so we can debug in VPS logs
                 mi      = full_text.rfind(ORDER_JSON_MARKER)
                 context = full_text[max(0, mi - 20): mi + 500]
-                logger.info("[ORDER] 🔍 Marker found — context:\n%r", context)
+                logger.info("[ORDER] 🔍 Marker found:\n%r", context)
 
                 parsed = parse_order_json(full_text)
                 if parsed is None:
-                    logger.info("[ORDER] ⏳ JSON not complete yet — waiting for more chunks")
+                    logger.info("[ORDER] ⏳ JSON incomplete — waiting")
                     return False
 
-                logger.info("[ORDER] 📦 Parsed JSON: %s", json.dumps(parsed, ensure_ascii=False))
+                logger.info("[ORDER] 📦 Parsed: %s", json.dumps(parsed, ensure_ascii=False))
 
                 normalized, missing = normalize_reservation(parsed)
                 if missing:
-                    logger.warning("[ORDER] ⚠ Missing fields: %s — waiting for more chunks", missing)
+                    logger.warning("[ORDER] ⚠ Missing: %s — waiting", missing)
                     return False
 
                 raw_json = json.dumps({
@@ -747,18 +677,13 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     "total_peoples":  normalized["total_peoples"],
                     "contact_number": normalized["contact_number"],
                 })
-
                 try:
-                    save_order(
-                        restaurant_id, restaurant_name, caller, call_sid,
-                        normalized, raw_json,
-                    )
+                    save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw_json)
                     order_saved = True
                     return True
                 except Exception:
                     return False
 
-            # ── Receive Twilio audio ────────────────────────────────────────────
             async def receive_twilio():
                 nonlocal stream_sid, start_ts, call_sid
                 try:
@@ -796,7 +721,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 except Exception as exc:
                     s = str(exc)
                     if any(x in s for x in ("WebSocket is not connected", "1000", "1001")):
-                        logger.info("[CALL] Twilio WS closed normally")
+                        logger.info("[CALL] Twilio WS closed  sid=%s", stream_sid)
                     else:
                         logger.exception("[CALL] receive_twilio: %s", exc)
                     try:
@@ -804,7 +729,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     except Exception:
                         pass
 
-            # ── OpenAI event loop ──────────────────────────────────────────────
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
                 nonlocal full_text, order_saved, arm_hangup
@@ -816,7 +740,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if REALTIME_LOG_EVERY_EVENT:
                         logger.info("[OAI-EVENT] %s", etype)
 
-                    # ── Lifecycle ──────────────────────────────────────────────
                     if etype == "response.created":
                         response_active     = True
                         response_cancelling = False
@@ -826,18 +749,12 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         response_cancelling = False
                         last_assistant_item = None
 
-                        # ── HANGUP after confirmation ──────────────────────────
-                        # arm_hangup is set after ORDER_JSON is saved.
-                        # The model then speaks the verbal confirmation.
-                        # When that response finishes (response.done here),
-                        # we wait 1 second and hang up.
                         if arm_hangup and not call_ending:
-                            logger.info("[CALL] ✅ Confirmation response done — hanging up in 1s")
+                            logger.info("[CALL] ✅ Confirmation done — hanging up in 1s")
                             await asyncio.sleep(1.0)
                             await end_call("auto-hangup after confirmation")
                             break
 
-                    # ── Errors ─────────────────────────────────────────────────
                     elif etype == "error":
                         err  = ev.get("error") or {}
                         code = err.get("code", "")
@@ -845,45 +762,38 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                     "item_truncated"):
                             response_cancelling = False
                             continue
-                        logger.error("[OAI] ❌ error %s: %s", code, err.get("message", ""))
+                        logger.error("[OAI] ❌ %s: %s", code, err.get("message", ""))
                         continue
 
-                    # ── Accumulate text ────────────────────────────────────────
+                    # Accumulate all text
                     new_texts = texts_from_event(ev)
                     if new_texts:
                         chunk = "".join(new_texts)
                         full_text += chunk
                         if len(full_text) > 60_000:
                             full_text = full_text[-30_000:]
-
-                        # Log ALL text output so we can see exactly what the
-                        # model is saying and whether ORDER_JSON appears
                         if chunk.strip():
                             logger.info("[MODEL-TEXT] %s", chunk)
 
-                    # ── Try to save order ──────────────────────────────────────
+                    # Try save on every chunk
                     if not order_saved and ORDER_JSON_MARKER in full_text:
-                        saved = try_save()
-                        if saved:
-                            logger.info("[ORDER] ✅ Order saved — arming hangup after next response.done")
+                        if try_save():
+                            logger.info("[ORDER] ✅ Saved — arming hangup")
                             arm_hangup = True
 
-                    # ── Interrupt (disabled after order saved) ─────────────────
+                    # Interrupt only before order saved
                     if etype == "input_audio_buffer.speech_started":
                         if not order_saved:
-                            logger.info("[CALL] 🗣 speech_started — interrupting")
+                            logger.info("[CALL] 🗣 Interrupting")
                             await interrupt()
                         else:
-                            logger.info("[CALL] 🗣 speech_started ignored (post-order, letting confirmation finish)")
+                            logger.info("[CALL] 🗣 Ignored (post-order)")
 
-                    # ── Fallback: response after speech ────────────────────────
                     elif etype == "input_audio_buffer.speech_stopped":
                         if not response_active and not response_cancelling:
-                            logger.debug("[CALL] speech_stopped fallback → response.create")
                             await oai({"type": "response.create"})
                             response_active = True
 
-                    # ── Stream audio → Twilio ──────────────────────────────────
                     if etype in {"response.output_audio.delta", "response.audio.delta"}:
                         audio = ev.get("delta")
                         if isinstance(audio, str) and stream_sid:
@@ -896,14 +806,13 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             last_assistant_item = ev["item_id"]
                             response_active     = True
 
-            # ── Run both coroutines ────────────────────────────────────────────
             try:
                 await asyncio.gather(receive_twilio(), send_twilio())
             finally:
                 log_call()
 
     except websockets.exceptions.ConnectionClosedError as exc:
-        logger.warning("[OPENAI] WS closed unexpectedly: %s", exc)
+        logger.warning("[OPENAI] WS closed: %s", exc)
         try:
             await websocket.close()
         except Exception:
@@ -918,18 +827,22 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
 # ── WebSocket routes ───────────────────────────────────────────────────────────
 @app.websocket("/media-stream")
+@app.websocket("/api/media-stream")
 async def handle_media_stream(websocket: WebSocket):
     q = websocket.query_params.get("restaurant_id")
     await handle_media_stream_with_id(websocket, int(q) if q and q.isdigit() else None)
 
 
 @app.websocket("/media-stream/{restaurant_id}")
+@app.websocket("/api/media-stream/{restaurant_id}")
 async def handle_media_stream_restaurant(websocket: WebSocket, restaurant_id: int):
     await handle_media_stream_with_id(websocket, restaurant_id)
 
 
 @app.get("/media-stream")
 @app.get("/media-stream/{restaurant_id}")
+@app.get("/api/media-stream")
+@app.get("/api/media-stream/{restaurant_id}")
 def media_stream_http_guard(restaurant_id: int | None = None):
     return JSONResponse(status_code=426, content={
         "error":  "WebSocket required",

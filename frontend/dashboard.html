@@ -1329,6 +1329,9 @@ function setLang(lang) {
 
 // ─── CORE APP ────────────────────────────────────────────────────────────────
 const API_BASE = (() => {
+  const saved = normalizeUrl(localStorage.getItem('apiBaseUrl') || '');
+  if (saved) return saved;
+
   const isLocalStaticFrontend =
     (window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1" ||
@@ -1339,7 +1342,7 @@ const API_BASE = (() => {
     ? window.location.origin.replace(":8000", ":5050")
     : window.location.origin;
 
-  return isLocalStaticFrontend ? apiOrigin : `${apiOrigin}/api`;
+  return `${apiOrigin}/api`;
 })();
 const authState = {
   token: localStorage.getItem('auth_token') || ''
