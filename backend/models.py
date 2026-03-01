@@ -37,6 +37,8 @@ class Order(Base):
     payment_method = Column(String(50))
     status = Column(String(50), default="completed")
     raw_json = Column(Text)
+    recording_sid = Column(String(100), nullable=True)
+    recording_url = Column(String(500), nullable=True)
     created = Column(DateTime, default=datetime.utcnow)
 
 

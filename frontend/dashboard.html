@@ -1097,12 +1097,13 @@
             <th data-i18n="Arrival Time">Arrival Time</th>
             <th data-i18n="Total People">Total People</th>
             <th data-i18n="Contact Number">Contact Number</th>
+            <th>Recording</th>
             <th data-i18n="Status">Status</th>
             <th data-i18n="Date">Date</th>
           </tr>
         </thead>
         <tbody id="orderTable">
-          <tr><td colspan="10"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
+          <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1815,12 +1816,27 @@ function orderStatusBadge(s) {
   return `<span class="badge badge-blue">${esc(s)}</span>`;
 }
 
+function toAbsoluteRecordingUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/')) {
+    try {
+      const base = new URL(API_BASE, window.location.origin);
+      return `${base.origin}${raw}`;
+    } catch (e) {
+      return raw;
+    }
+  }
+  return raw;
+}
+
 async function loadOrders() {
   try {
     const orders = await (await apiFetch(`${API_BASE}/orders/`)).json();
     const tbody = document.getElementById('orderTable');
     if (!orders.length) {
-      tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = orders.map(o => {
@@ -1828,6 +1844,10 @@ async function loadOrders() {
       const timeArrival = o.time_arrival || o['time-arrival'] || o.house_number || '';
       const totalPeoples = o.total_peoples ?? o.total_people ?? o.ordered_items ?? '';
       const contactNumber = o.contact_number || o.contactNumber || o.payment_method || '';
+      const recordingUrl = toAbsoluteRecordingUrl(o.recording_url);
+      const recordingCell = recordingUrl
+        ? `<audio controls preload="none" src="${esc(recordingUrl)}" style="width:180px;height:30px"></audio>`
+        : `<span style="color:var(--muted)">-</span>`;
       return `
         <tr>
           <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${o.id}</td>
@@ -1838,6 +1858,7 @@ async function loadOrders() {
           <td>${esc(timeArrival)}</td>
           <td>${esc(totalPeoples)}</td>
           <td>${esc(contactNumber)}</td>
+          <td>${recordingCell}</td>
           <td>${orderStatusBadge(o.status)}</td>
           <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(o.created)}</td>
         </tr>`;

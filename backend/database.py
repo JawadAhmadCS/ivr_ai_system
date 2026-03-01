@@ -36,3 +36,13 @@ def ensure_schema():
                 conn.execute(text("ALTER TABLE call_logs ADD COLUMN restaurant_id INT NULL"))
         except Exception:
             pass
+        try:
+            if not _column_exists(conn, "orders", "recording_sid"):
+                conn.execute(text("ALTER TABLE orders ADD COLUMN recording_sid VARCHAR(100) NULL"))
+        except Exception:
+            pass
+        try:
+            if not _column_exists(conn, "orders", "recording_url"):
+                conn.execute(text("ALTER TABLE orders ADD COLUMN recording_url VARCHAR(500) NULL"))
+        except Exception:
+            pass

@@ -2,10 +2,11 @@ import os
 import json
 import asyncio
 import logging
+import time
 import websockets
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, parse_qsl
 
 import httpx
 import requests
@@ -41,14 +42,23 @@ VOICE                    = os.getenv("VOICE", "alloy")
 LOG_LEVEL                = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
 REALTIME_LOG_EVERY_EVENT = _env_bool("REALTIME_LOG_EVERY_EVENT", False)
 
-TURN_DETECTION_THRESHOLD      = float(os.getenv("TURN_DETECTION_THRESHOLD", 0.7))
+TURN_DETECTION_THRESHOLD      = float(os.getenv("TURN_DETECTION_THRESHOLD", 1))
 TURN_DETECTION_SILENCE_MS     = int(os.getenv("TURN_DETECTION_SILENCE_MS", 600))
 TURN_DETECTION_PREFIX_MS      = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
 TURN_DETECTION_CREATE_RESPONSE    = _env_bool("TURN_DETECTION_CREATE_RESPONSE", True)
 TURN_DETECTION_INTERRUPT_RESPONSE = _env_bool("TURN_DETECTION_INTERRUPT_RESPONSE", True)
+PLAY_PRECALL_NOTICE              = _env_bool("PLAY_PRECALL_NOTICE", True)
+PRECALL_NOTICE_AUDIO_URL         = (os.getenv("PRECALL_NOTICE_AUDIO_URL") or "").strip()
+PRECALL_NOTICE_TEXT              = (
+    os.getenv("PRECALL_NOTICE_TEXT")
+    or "Your call may be recorded for quality and training purposes."
+).strip()
 
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
+ENABLE_TWILIO_RECORDING   = _env_bool("ENABLE_TWILIO_RECORDING", True)
+RECORDING_FETCH_ATTEMPTS  = int(os.getenv("RECORDING_FETCH_ATTEMPTS", 15))
+RECORDING_FETCH_SLEEP_SEC = float(os.getenv("RECORDING_FETCH_SLEEP_SEC", 1.0))
 
 ORDER_JSON_MARKER = "ORDER_JSON:"
 
@@ -57,6 +67,7 @@ PROMPT_DIR      = BASE_DIR / "prompts"
 RESTAURANT_FILE = PROMPT_DIR / "restaurants.json"
 FRONTEND_DIR    = BASE_DIR.parent / "frontend"
 DASHBOARD_FILE  = FRONTEND_DIR / "dashboard.html"
+RECORDINGS_DIR  = BASE_DIR / "recordings"
 
 # ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI()
@@ -140,6 +151,43 @@ def get_restaurant_name(restaurant_id: int | None) -> str:
 
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
+def _normalize_phone_number(value: str | None) -> str:
+    if not value:
+        return ""
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    return digits
+
+
+def resolve_restaurant_id_by_phone(number: str | None) -> int | None:
+    incoming = _normalize_phone_number(number)
+    if not incoming:
+        return None
+
+    db = SessionLocal()
+    try:
+        best_match_id = None
+        best_match_len = -1
+        rows = (
+            db.query(models.Restaurant.id, models.Restaurant.phone)
+            .filter(models.Restaurant.active.is_(True))
+            .all()
+        )
+        for rid, phone in rows:
+            stored = _normalize_phone_number(phone)
+            if not stored:
+                continue
+            if incoming == stored or incoming.endswith(stored) or stored.endswith(incoming):
+                score = min(len(incoming), len(stored))
+                if score > best_match_len:
+                    best_match_len = score
+                    best_match_id = rid
+        return best_match_id
+    finally:
+        db.close()
+
+
 def save_call_log(restaurant_id, restaurant_name, caller, duration, status):
     db = SessionLocal()
     try:
@@ -161,7 +209,16 @@ def restaurant_exists_and_active(rid: int) -> bool:
         db.close()
 
 
-def save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw_json):
+def save_order(
+    restaurant_id,
+    restaurant_name,
+    caller,
+    call_sid,
+    normalized,
+    raw_json,
+    recording_sid: str | None = None,
+    recording_url: str | None = None,
+):
     db = SessionLocal()
     try:
         db.add(models.Order(
@@ -177,6 +234,8 @@ def save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw
             payment_method=normalized["contact_number"],
             status="completed",
             raw_json=raw_json,
+            recording_sid=recording_sid,
+            recording_url=recording_url,
         ))
         db.commit()
         logger.info(
@@ -193,6 +252,80 @@ def save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw
 
 
 # ── OpenAI helpers ─────────────────────────────────────────────────────────────
+def attach_recording_to_latest_order(call_sid: str, recording_sid: str | None, recording_url: str | None) -> bool:
+    if not call_sid:
+        return False
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(models.Order)
+            .filter(models.Order.call_sid == call_sid)
+            .order_by(models.Order.id.desc())
+            .first()
+        )
+        if not row:
+            return False
+        changed = False
+        if recording_sid and row.recording_sid != recording_sid:
+            row.recording_sid = recording_sid
+            changed = True
+        if recording_url and row.recording_url != recording_url:
+            row.recording_url = recording_url
+            changed = True
+        if changed:
+            db.commit()
+        return changed
+    finally:
+        db.close()
+
+
+def start_twilio_recording(call_sid: str) -> str | None:
+    if not ENABLE_TWILIO_RECORDING or not call_sid or not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        return None
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    try:
+        rec = client.calls(call_sid).recordings.create(recording_channels="dual")
+    except TypeError:
+        rec = client.calls(call_sid).recordings.create()
+    except Exception as exc:
+        logger.warning("[TWILIO] ⚠ Could not start recording for %s: %s", call_sid, exc)
+        return None
+    sid = str(getattr(rec, "sid", "") or "")
+    if sid:
+        logger.info("[TWILIO] 🎙 Recording started: %s (call=%s)", sid, call_sid)
+    return sid or None
+
+
+def download_twilio_recording(recording_sid: str) -> str | None:
+    if not recording_sid or not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        return None
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+    api_url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Recordings/{recording_sid}.wav"
+    auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    last_error = None
+
+    for _ in range(max(1, RECORDING_FETCH_ATTEMPTS)):
+        try:
+            r = requests.get(api_url, auth=auth, timeout=30)
+            if r.status_code == 200 and r.content:
+                out = RECORDINGS_DIR / f"{recording_sid}.wav"
+                out.write_bytes(r.content)
+                return f"/recordings/{out.name}"
+            if r.status_code in (202, 204, 404):
+                time.sleep(max(0.1, RECORDING_FETCH_SLEEP_SEC))
+                continue
+            last_error = f"HTTP {r.status_code}"
+            time.sleep(max(0.1, RECORDING_FETCH_SLEEP_SEC))
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(max(0.1, RECORDING_FETCH_SLEEP_SEC))
+
+    if last_error:
+        logger.warning("[TWILIO] ⚠ Could not download recording %s: %s", recording_sid, last_error)
+    return None
+
+
 def log_openai_status(ctx: str, ok: bool, detail: str = ""):
     print(f"[OPENAI][{ctx}] {'WORKING' if ok else 'NOT WORKING'}{' | ' + detail if detail else ''}")
 
@@ -389,18 +522,54 @@ async def dashboard_page():
     return FileResponse(DASHBOARD_FILE)
 
 
+@app.get("/recordings/{filename}")
+@app.get("/api/recordings/{filename}")
+async def get_recording_file(filename: str):
+    safe_name = Path(filename).name
+    path = (RECORDINGS_DIR / safe_name).resolve()
+    base = RECORDINGS_DIR.resolve()
+    if not str(path).startswith(str(base)):
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return FileResponse(path, media_type="audio/wav", filename=safe_name)
+
+
 # ── Twilio webhook ─────────────────────────────────────────────────────────────
 @app.api_route("/incoming-call",                     methods=["GET", "POST"])
 @app.api_route("/incoming-call/{restaurant_id}",     methods=["GET", "POST"])
 @app.api_route("/api/incoming-call",                 methods=["GET", "POST"])
 @app.api_route("/api/incoming-call/{restaurant_id}", methods=["GET", "POST"])
 async def incoming_call(request: Request, restaurant_id: int | None = None):
+    p = dict(request.query_params)
+    if request.method == "POST":
+        raw_body = await request.body()
+        if raw_body:
+            try:
+                for key, value in parse_qsl(raw_body.decode("utf-8", errors="ignore"), keep_blank_values=True):
+                    if key not in p:
+                        p[key] = value
+            except Exception:
+                pass
+        if not p:
+            try:
+                form_data = await request.form()
+                p = {k: str(v) for k, v in form_data.items()}
+            except Exception:
+                p = dict(request.query_params)
+
     if restaurant_id is None:
-        q = request.query_params.get("restaurant_id")
-        if q and q.isdigit():
+        q = str(p.get("restaurant_id") or "").strip()
+        if q.isdigit():
             restaurant_id = int(q)
 
-    p        = dict(request.query_params)
+    if restaurant_id is None:
+        inbound_number = str(p.get("To") or p.get("Called") or "")
+        inferred_id = resolve_restaurant_id_by_phone(inbound_number)
+        if inferred_id is not None:
+            restaurant_id = inferred_id
+            logger.info("[CALL] Restaurant resolved from To=%s -> restaurant_id=%s", inbound_number, restaurant_id)
+
     caller   = str(p.get("From") or p.get("Caller") or "Unknown")
     call_sid = str(p.get("CallSid") or "")
 
@@ -409,6 +578,12 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         response.say("Invalid restaurant. Please contact support.", voice="alice")
         response.append(Hangup())
         return HTMLResponse(content=str(response), media_type="application/xml")
+
+    if PLAY_PRECALL_NOTICE:
+        if PRECALL_NOTICE_AUDIO_URL:
+            response.play(PRECALL_NOTICE_AUDIO_URL)
+        elif PRECALL_NOTICE_TEXT:
+            response.say(PRECALL_NOTICE_TEXT, voice="alice")
 
     host      = request.headers.get("host")
     path      = request.url.path or ""
@@ -597,6 +772,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             full_text   = ""
             order_saved = False
             arm_hangup  = False
+            recording_sid = None
 
             def log_call():
                 nonlocal logged
@@ -685,7 +861,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     return False
 
             async def receive_twilio():
-                nonlocal stream_sid, start_ts, call_sid
+                nonlocal stream_sid, start_ts, call_sid, recording_sid
                 try:
                     async for message in websocket.iter_text():
                         ev    = json.loads(message)
@@ -696,6 +872,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             start_ts   = datetime.utcnow()
                             if not call_sid:
                                 call_sid = str(ev["start"].get("callSid") or "")
+                            if not recording_sid and call_sid:
+                                recording_sid = await asyncio.to_thread(start_twilio_recording, call_sid)
                             logger.info("[CALL] ▶ Stream  sid=%s  caller=%s", stream_sid, caller)
 
                         elif etype == "media":
@@ -810,6 +988,22 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 await asyncio.gather(receive_twilio(), send_twilio())
             finally:
                 log_call()
+                recording_url = None
+                if recording_sid:
+                    recording_url = await asyncio.to_thread(download_twilio_recording, recording_sid)
+                if call_sid and (recording_sid or recording_url):
+                    attached = await asyncio.to_thread(
+                        attach_recording_to_latest_order,
+                        call_sid,
+                        recording_sid,
+                        recording_url,
+                    )
+                    if attached:
+                        logger.info(
+                            "[ORDER] 🎧 Recording linked to order  call_sid=%s  recording_sid=%s",
+                            call_sid,
+                            recording_sid,
+                        )
 
     except websockets.exceptions.ConnectionClosedError as exc:
         logger.warning("[OPENAI] WS closed: %s", exc)

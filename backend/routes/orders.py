@@ -38,6 +38,8 @@ def list_orders(user=Depends(require_auth)):
                 "ordered_items": o.ordered_items,
                 "payment_method": o.payment_method,
                 "status": o.status,
+                "recording_sid": o.recording_sid,
+                "recording_url": o.recording_url,
                 "created": o.created.isoformat() if o.created else None,
             }
             for o in rows
