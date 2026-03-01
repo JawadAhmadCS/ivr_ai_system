@@ -23,6 +23,7 @@
     --radius: 12px;
     --radius-sm: 8px;
     --sidebar-w: 220px;
+    --sidebar-w-collapsed: 72px;
   }
 
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -64,6 +65,7 @@
     display: flex;
     flex-direction: column;
     z-index: 100;
+    transition: width 0.2s ease;
   }
 
   .logo {
@@ -72,6 +74,29 @@
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+
+  .sidebar-toggle {
+    margin-inline-start: auto;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s;
+  }
+
+  .sidebar-toggle:hover {
+    background: var(--subtle);
+    color: var(--text);
+    border-color: #2a3f5f;
   }
 
   .logo-icon {
@@ -184,6 +209,47 @@
     min-height: 100vh;
     position: relative;
     z-index: 1;
+    transition: margin-left 0.2s ease;
+  }
+
+  body.sidebar-collapsed .sidebar { width: var(--sidebar-w-collapsed); }
+  body.sidebar-collapsed .main { margin-left: var(--sidebar-w-collapsed); }
+  body.sidebar-collapsed .logo {
+    padding: 14px 10px;
+    justify-content: center;
+    gap: 8px;
+  }
+  body.sidebar-collapsed .logo-text,
+  body.sidebar-collapsed .nav-label,
+  body.sidebar-collapsed .status-pill span {
+    display: none;
+  }
+  body.sidebar-collapsed .sidebar-toggle { margin-inline-start: 0; }
+  body.sidebar-collapsed .nav {
+    padding: 12px 8px;
+  }
+  body.sidebar-collapsed .nav-btn {
+    justify-content: center;
+    padding: 10px 8px;
+    gap: 0;
+  }
+  body.sidebar-collapsed .nav-btn > span { display: none; }
+  body.sidebar-collapsed .sidebar-footer { padding: 10px 8px; }
+  body.sidebar-collapsed .status-pill {
+    justify-content: center;
+    padding: 8px;
+  }
+  body.sidebar-collapsed .sidebar-footer .btn {
+    font-size: 0;
+    justify-content: center;
+    width: 100%;
+    min-height: 34px;
+    padding: 8px;
+  }
+  body.sidebar-collapsed .sidebar-footer .btn::before {
+    content: '⎋';
+    font-size: 16px;
+    line-height: 1;
   }
 
   .page { display: none; animation: fadeIn 0.25s ease; }
@@ -841,6 +907,7 @@
   <div class="logo">
     <div class="logo-icon">🎙️</div>
     <div class="logo-text">Voice<span>IQ</span></div>
+    <button id="sidebarToggle" class="sidebar-toggle" type="button" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
   </div>
 
   <div class="nav">
@@ -1100,10 +1167,11 @@
             <th>Recording</th>
             <th data-i18n="Status">Status</th>
             <th data-i18n="Date">Date</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="orderTable">
-          <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
+          <tr><td colspan="12"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1326,6 +1394,16 @@ function setLang(lang) {
 
   // Re-render restaurant detail if open (to translate dynamic content)
   if (selectedId) openRestaurant(selectedId, true);
+  refreshSidebarNavTitles();
+}
+
+function refreshSidebarNavTitles() {
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    const label = btn.querySelector('span[data-i18n]')?.textContent?.trim()
+      || btn.querySelector('span')?.textContent?.trim()
+      || '';
+    if (label) btn.title = label;
+  });
 }
 
 // ─── CORE APP ────────────────────────────────────────────────────────────────
@@ -1348,6 +1426,22 @@ const API_BASE = (() => {
 const authState = {
   token: localStorage.getItem('auth_token') || ''
 };
+let sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === '1';
+
+function applySidebarState() {
+  document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+  const btn = document.getElementById('sidebarToggle');
+  if (btn) {
+    btn.textContent = sidebarCollapsed ? '›' : '‹';
+    btn.title = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  }
+}
+
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  localStorage.setItem('sidebar_collapsed', sidebarCollapsed ? '1' : '0');
+  applySidebarState();
+}
 
 let initialized = false;
 let currentUser = null;
@@ -1505,6 +1599,7 @@ async function initAfterAuth() {
   loadLogs();
 }
 let restaurantsCache = [];
+let ordersCache = [];
 let selectedId = null;
 let assignBoxOpenedByIcon = false;
 let assignBoxRestaurantId = null;
@@ -1831,15 +1926,66 @@ function toAbsoluteRecordingUrl(url) {
   return raw;
 }
 
+async function editOrder(orderId) {
+  const o = ordersCache.find(x => Number(x.id) === Number(orderId));
+  if (!o) { toast('Order not found', 'error'); return; }
+
+  const fullName = prompt('Customer name', o.full_name ?? '');
+  if (fullName === null) return;
+  const dateArrival = prompt('Arrival date', o.address ?? '');
+  if (dateArrival === null) return;
+  const timeArrival = prompt('Arrival time', o.house_number ?? '');
+  if (timeArrival === null) return;
+  const totalPeoples = prompt('Total people', o.ordered_items ?? '');
+  if (totalPeoples === null) return;
+  const contactNumber = prompt('Contact number', o.payment_method ?? '');
+  if (contactNumber === null) return;
+  const status = prompt('Status', o.status ?? 'completed');
+  if (status === null) return;
+
+  try {
+    const res = await apiFetch(`${API_BASE}/orders/${orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: fullName,
+        date_arrival: dateArrival,
+        time_arrival: timeArrival,
+        total_peoples: totalPeoples,
+        contact_number: contactNumber,
+        status
+      })
+    });
+    if (!res.ok) throw new Error('update failed');
+    toast('Order updated');
+    await loadOrders();
+  } catch (e) {
+    toast('Failed', 'error');
+  }
+}
+
+async function deleteOrder(orderId) {
+  if (!confirm(`Delete order #${orderId}?`)) return;
+  try {
+    const res = await apiFetch(`${API_BASE}/orders/${orderId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('delete failed');
+    toast('Order deleted');
+    await loadOrders();
+  } catch (e) {
+    toast('Failed', 'error');
+  }
+}
+
 async function loadOrders() {
   try {
     const orders = await (await apiFetch(`${API_BASE}/orders/`)).json();
+    ordersCache = Array.isArray(orders) ? orders : [];
     const tbody = document.getElementById('orderTable');
-    if (!orders.length) {
-      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
+    if (!ordersCache.length) {
+      tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = orders.map(o => {
+    tbody.innerHTML = ordersCache.map(o => {
       const dateArrival = o['date-arrival'] || o.date_arrival || o.address || '';
       const timeArrival = o.time_arrival || o['time-arrival'] || o.house_number || '';
       const totalPeoples = o.total_peoples ?? o.total_people ?? o.ordered_items ?? '';
@@ -1861,6 +2007,12 @@ async function loadOrders() {
           <td>${recordingCell}</td>
           <td>${orderStatusBadge(o.status)}</td>
           <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(o.created)}</td>
+          <td>
+            <div style="display:flex;gap:6px;justify-content:center">
+              <button class="btn btn-secondary btn-sm" onclick="editOrder(${o.id})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.id})">Delete</button>
+            </div>
+          </td>
         </tr>`;
     }).join('');
   } catch(e) {}
@@ -2395,6 +2547,8 @@ async function startVoice() {
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 // Apply saved language on load
+refreshSidebarNavTitles();
+applySidebarState();
 if (currentLang === 'he') setLang('he');
 
 checkAuth().then(ok => {
