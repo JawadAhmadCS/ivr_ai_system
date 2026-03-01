@@ -1093,15 +1093,16 @@
             <th data-i18n="Restaurant">Restaurant</th>
             <th data-i18n="Customer">Customer</th>
             <th data-i18n="Order Type">Order Type</th>
-            <th data-i18n="Address">Address</th>
-            <th data-i18n="Items">Items</th>
-            <th data-i18n="Payment">Payment</th>
+            <th data-i18n="Arrival Date">Arrival Date</th>
+            <th data-i18n="Arrival Time">Arrival Time</th>
+            <th data-i18n="Total People">Total People</th>
+            <th data-i18n="Contact Number">Contact Number</th>
             <th data-i18n="Status">Status</th>
             <th data-i18n="Date">Date</th>
           </tr>
         </thead>
         <tbody id="orderTable">
-          <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
+          <tr><td colspan="10"><div class="empty-state"><div class="empty-icon">#</div><p data-i18n="No orders recorded yet">No orders recorded yet</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1183,6 +1184,10 @@ const TRANSLATIONS = {
     "Structured orders captured from calls": "Structured orders captured from calls",
     "Customer": "Customer",
     "Order Type": "Order Type",
+    "Arrival Date": "Arrival Date",
+    "Arrival Time": "Arrival Time",
+    "Total People": "Total People",
+    "Contact Number": "Contact Number",
     "Address": "Address",
     "Items": "Items",
     "Payment": "Payment",
@@ -1636,60 +1641,31 @@ function firstOrderValue(obj, keys) {
 
 function normalizeOrderPayloadClient(data) {
   if (!data || typeof data !== 'object') {
-    return { data: {}, missing: ['order_type','full_name','ordered_items','payment_method'] };
+    return { data: {}, missing: ['full_name','date-arrival','time_arrival','total_peoples','contact_number'] };
   }
-  const orderRaw = cleanOrderField(firstOrderValue(data, ['order_type','orderType','type','order']));
-  let orderType = orderRaw.toLowerCase();
-  if (orderType.includes('deliver')) orderType = 'delivery';
-  else if (orderType.includes('pick') || orderType.includes('take')) orderType = 'pickup';
-
-  const payRaw = cleanOrderField(firstOrderValue(data, ['payment_method','paymentMethod','payment','payment_type']));
-  let paymentMethod = payRaw.toLowerCase();
-  if (paymentMethod.includes('card') || paymentMethod.includes('credit') || paymentMethod.includes('debit')) paymentMethod = 'card';
-  else if (paymentMethod.includes('cash')) paymentMethod = 'cash';
-
   const fullName = cleanOrderField(firstOrderValue(data, ['full_name','fullName','name','customer_name','customerName']));
-  const address = cleanOrderField(firstOrderValue(data, ['address','street','street_address','streetAddress']));
-  const houseNumber = cleanOrderField(firstOrderValue(data, ['house_number','houseNo','house_no','house','apt','apartment']));
-  const itemsValue = firstOrderValue(data, ['ordered_items','items','order_items','items_list','orderItems']);
-  let orderedItems = '';
-  if (Array.isArray(itemsValue)) {
-    const parts = [];
-    itemsValue.forEach(v => {
-      if (v && typeof v === 'object') {
-        const name = v.name || v.item || v.title;
-        const qty = v.qty || v.quantity;
-        if (name && qty) parts.push(`${name} x${qty}`);
-        else if (name) parts.push(String(name));
-        else parts.push(String(v));
-      } else {
-        const cleaned = cleanOrderField(v);
-        if (cleaned) parts.push(cleaned);
-      }
-    });
-    orderedItems = parts.join(', ');
-  } else {
-    orderedItems = cleanOrderField(itemsValue);
-  }
+  const dateArrival = cleanOrderField(firstOrderValue(data, ['date-arrival','date_arrival','arrival_date','dateArrival']));
+  const timeArrival = cleanOrderField(firstOrderValue(data, ['time_arrival','arrival_time','timeArrival','time']));
+  const contactNumber = cleanOrderField(firstOrderValue(data, ['contact_number','contactNumber','phone','phone_number']));
+  const totalRaw = firstOrderValue(data, ['total_peoples','total_people','people','party_size']);
+  const totalDigits = cleanOrderField(totalRaw).replace(/\D/g, '');
+  const totalPeoples = totalDigits ? Number(totalDigits) : (Number.isInteger(totalRaw) ? totalRaw : 0);
 
   const missing = [];
-  if (!['delivery','pickup'].includes(orderType)) missing.push('order_type');
   if (!fullName) missing.push('full_name');
-  if (!orderedItems) missing.push('ordered_items');
-  if (!['card','cash'].includes(paymentMethod)) missing.push('payment_method');
-  if (orderType === 'delivery') {
-    if (!address) missing.push('address');
-    if (!houseNumber) missing.push('house_number');
-  }
+  if (!dateArrival) missing.push('date-arrival');
+  if (!timeArrival) missing.push('time_arrival');
+  if (!totalPeoples || totalPeoples <= 0) missing.push('total_peoples');
+  if (!contactNumber) missing.push('contact_number');
 
   return {
     data: {
-      order_type: orderType,
+      order_type: 'reservation',
       full_name: fullName,
-      address,
-      house_number: houseNumber,
-      ordered_items: orderedItems,
-      payment_method: paymentMethod
+      'date-arrival': dateArrival,
+      time_arrival: timeArrival,
+      total_peoples: totalPeoples,
+      contact_number: contactNumber
     },
     missing
   };
@@ -1698,7 +1674,7 @@ function normalizeOrderPayloadClient(data) {
 function extractTextCandidates(evt) {
   if (!evt || typeof evt !== 'object') return [];
   const type = String(evt.type || '');
-  if (type === 'response.output_audio.delta') return [];
+  if (type === 'response.output_audio.delta' || type === 'response.audio.delta') return [];
   const texts = [];
   ['delta','text','transcript'].forEach(k => {
     const v = evt[k];
@@ -1763,10 +1739,10 @@ async function ingestOrder(data, raw) {
     restaurant_id: selectedId,
     order_type: data.order_type,
     full_name: data.full_name,
-    address: data.address,
-    house_number: data.house_number,
-    ordered_items: data.ordered_items,
-    payment_method: data.payment_method,
+    'date-arrival': data['date-arrival'],
+    time_arrival: data.time_arrival,
+    total_peoples: data.total_peoples,
+    contact_number: data.contact_number,
     raw_json: raw
   };
   const res = await apiFetch(`${API_BASE}/orders/ingest`, {
@@ -1841,20 +1817,24 @@ async function loadOrders() {
     const orders = await (await apiFetch(`${API_BASE}/orders/`)).json();
     const tbody = document.getElementById('orderTable');
     if (!orders.length) {
-      tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">#</div><p>${t('No orders recorded yet')}</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = orders.map(o => {
-      const addr = [o.address, o.house_number].filter(Boolean).join(', ');
+      const dateArrival = o['date-arrival'] || o.date_arrival || o.address || '';
+      const timeArrival = o.time_arrival || o['time-arrival'] || o.house_number || '';
+      const totalPeoples = o.total_peoples ?? o.total_people ?? o.ordered_items ?? '';
+      const contactNumber = o.contact_number || o.contactNumber || o.payment_method || '';
       return `
         <tr>
           <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">#${o.id}</td>
           <td>${esc(o.restaurant)}</td>
           <td style="font-family:'DM Mono',monospace;font-size:12px">${esc(o.full_name)}</td>
           <td>${esc(o.order_type)}</td>
-          <td style="max-width:240px">${esc(addr)}</td>
-          <td style="max-width:260px">${esc(o.ordered_items)}</td>
-          <td>${esc(o.payment_method)}</td>
+          <td>${esc(dateArrival)}</td>
+          <td>${esc(timeArrival)}</td>
+          <td>${esc(totalPeoples)}</td>
+          <td>${esc(contactNumber)}</td>
           <td>${orderStatusBadge(o.status)}</td>
           <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)">${esc(o.created)}</td>
         </tr>`;
