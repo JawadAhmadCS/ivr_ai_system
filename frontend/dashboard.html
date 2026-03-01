@@ -1540,7 +1540,11 @@ function recUrl(url) {
   if (!s) return '';
   if (/^https?:\/\//i.test(s)) return s;
   if (s.startsWith('/')) {
-    try { return new URL(API_BASE, location.origin).origin + s; } catch { return s; }
+    try {
+      if (s.startsWith('/recordings/')) return `${API_BASE}${s}`;
+      if (s.startsWith('/api/recordings/')) return new URL(API_BASE, location.origin).origin + s;
+      return new URL(API_BASE, location.origin).origin + s;
+    } catch { return s; }
   }
   return s;
 }

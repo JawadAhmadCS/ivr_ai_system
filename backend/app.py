@@ -311,7 +311,7 @@ def download_twilio_recording(recording_sid: str) -> str | None:
             if r.status_code == 200 and r.content:
                 out = RECORDINGS_DIR / f"{recording_sid}.wav"
                 out.write_bytes(r.content)
-                return f"/recordings/{out.name}"
+                return f"/api/recordings/{out.name}"
             if r.status_code in (202, 204, 404):
                 time.sleep(max(0.1, RECORDING_FETCH_SLEEP_SEC))
                 continue
