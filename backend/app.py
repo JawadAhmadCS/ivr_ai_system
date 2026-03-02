@@ -127,10 +127,6 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     base  = f"{global_prompt}\n\n{addon}" if addon else global_prompt
 
     reservation_instructions = f"""\
-When you finish collecting all reservation details, output one machine-readable JSON block exactly once in this format:
-{ORDER_JSON_MARKER} {{"full_name":"...","date-arrival":"...","time_arrival":"...","total_peoples":2,"contact_number":"..."}}
-After the JSON block, output `{PROCESS_MARKER}` on its own line to signal backend verification and call completion.
-Do not add any extra machine tokens besides these.
 """
 
     return f"{base}\n{reservation_instructions}"
