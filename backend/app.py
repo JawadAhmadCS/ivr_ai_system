@@ -34,31 +34,33 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-OPENAI_API_KEY           = os.getenv("OPENAI_API_KEY")
-PORT                     = int(os.getenv("PORT", 5050))
-REALTIME_MODEL           = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview")
-TEMPERATURE              = float(os.getenv("TEMPERATURE", 0.6))
-VOICE                    = os.getenv("VOICE", "alloy")
-LOG_LEVEL                = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
-REALTIME_LOG_EVERY_EVENT = _env_bool("REALTIME_LOG_EVERY_EVENT", False)
+OPENAI_API_KEY                    = os.getenv("OPENAI_API_KEY")
+PORT                              = int(os.getenv("PORT", 5050))
+REALTIME_MODEL                    = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview")
+TEMPERATURE                       = float(os.getenv("TEMPERATURE", 0.6))
+VOICE                             = os.getenv("VOICE", "alloy")
+LOG_LEVEL                         = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
+REALTIME_LOG_EVERY_EVENT          = _env_bool("REALTIME_LOG_EVERY_EVENT", False)
 
-TURN_DETECTION_THRESHOLD      = float(os.getenv("TURN_DETECTION_THRESHOLD", 1))
-TURN_DETECTION_SILENCE_MS     = int(os.getenv("TURN_DETECTION_SILENCE_MS", 600))
-TURN_DETECTION_PREFIX_MS      = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
+TURN_DETECTION_THRESHOLD          = float(os.getenv("TURN_DETECTION_THRESHOLD", 1))
+TURN_DETECTION_SILENCE_MS         = int(os.getenv("TURN_DETECTION_SILENCE_MS", 600))
+TURN_DETECTION_PREFIX_MS          = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
 TURN_DETECTION_CREATE_RESPONSE    = _env_bool("TURN_DETECTION_CREATE_RESPONSE", True)
 TURN_DETECTION_INTERRUPT_RESPONSE = _env_bool("TURN_DETECTION_INTERRUPT_RESPONSE", True)
-PLAY_PRECALL_NOTICE              = _env_bool("PLAY_PRECALL_NOTICE", True)
-PRECALL_NOTICE_AUDIO_URL         = (os.getenv("PRECALL_NOTICE_AUDIO_URL") or "").strip()
-PRECALL_NOTICE_TEXT              = (
+PLAY_PRECALL_NOTICE               = _env_bool("PLAY_PRECALL_NOTICE", True)
+PRECALL_NOTICE_AUDIO_URL          = (os.getenv("PRECALL_NOTICE_AUDIO_URL") or "").strip()
+PRECALL_NOTICE_TEXT               = (
     os.getenv("PRECALL_NOTICE_TEXT")
     or "Your call may be recorded for quality and training purposes."
 ).strip()
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_ACCOUNT_SID        = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN         = os.getenv("TWILIO_AUTH_TOKEN")
 ENABLE_TWILIO_RECORDING   = _env_bool("ENABLE_TWILIO_RECORDING", True)
 RECORDING_FETCH_ATTEMPTS  = int(os.getenv("RECORDING_FETCH_ATTEMPTS", 15))
 RECORDING_FETCH_SLEEP_SEC = float(os.getenv("RECORDING_FETCH_SLEEP_SEC", 1.0))
+POST_CALL_EXTRACT_MODEL   = os.getenv("POST_CALL_EXTRACT_MODEL", "gpt-4o-mini")
+POST_CALL_EXTRACT_TIMEOUT = float(os.getenv("POST_CALL_EXTRACT_TIMEOUT", 60))
 
 ORDER_JSON_MARKER = "ORDER_JSON:"
 
@@ -82,25 +84,27 @@ for _noisy in ("websockets", "websockets.client", "websockets.server",
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 models.Base.metadata.create_all(bind=engine)
 ensure_schema()
 
-app.include_router(auth_routes.router)
-app.include_router(restaurant.router,  dependencies=[Depends(require_auth)])
-app.include_router(call_logs.router,   dependencies=[Depends(require_auth)])
-app.include_router(orders.router,      dependencies=[Depends(require_auth)])
-app.include_router(dashboard.router,   dependencies=[Depends(require_auth)])
-app.include_router(prompt.router,      dependencies=[Depends(require_auth)])
-app.include_router(auth_routes.router, prefix="/api")
-app.include_router(restaurant.router,  prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(call_logs.router,   prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(orders.router,      prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(dashboard.router,   prefix="/api", dependencies=[Depends(require_auth)])
-app.include_router(prompt.router,      prefix="/api", dependencies=[Depends(require_auth)])
+# ── Router Registration (deduplicated with /api prefix) ──────────────────────
+for router in [auth_routes.router, restaurant.router, call_logs.router,
+               orders.router, dashboard.router, prompt.router]:
+    app.include_router(router)
+    app.include_router(router, prefix="/api")
+
+# Re-apply auth dependencies explicitly for protected routers
+for router in [restaurant.router, call_logs.router, orders.router,
+               dashboard.router, prompt.router]:
+    app.include_router(router, dependencies=[Depends(require_auth)])
+    app.include_router(router, prefix="/api", dependencies=[Depends(require_auth)])
 
 if not OPENAI_API_KEY:
     raise ValueError("Missing OPENAI_API_KEY in .env")
@@ -122,7 +126,49 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     base  = f"{global_prompt}\n\n{addon}" if addon else global_prompt
 
     reservation_instructions = """\
-alway speak english
+You are a friendly and professional restaurant reservation assistant. Your job is to collect reservation details from the caller and confirm the booking.
+
+=== YOUR PERSONALITY ===
+- Warm, polite, and concise
+- Never robotic or repetitive
+- Speak naturally like a human receptionist
+
+=== STEP 1: COLLECT THESE 5 FIELDS ===
+Ask naturally, one or two at a time:
+1. Full Name
+2. Date of Arrival
+3. Time of Arrival
+4. Number of People
+5. Contact Number
+
+Example opening:
+"Hello! Thank you for calling. I'd be happy to help with your reservation. May I have your name please?"
+
+=== STEP 2: CONFIRM WITH CALLER ===
+Once all 5 fields are collected, read them back and confirm:
+"Just to confirm — reservation for [Full Name], on [Date] at [Time], for [Number] people. Your contact number is [Phone]. Is that all correct?"
+
+If caller says yes, proceed to Step 3.
+If caller corrects anything, update and re-confirm.
+
+=== STEP 3: COMPLETION - FOLLOW EXACTLY ===
+
+When the caller confirms the reservation is correct:
+1) FIRST output this backend signal silently (never speak it):
+ORDER_JSON: {"full_name":"[Full Name]","date-arrival":"[YYYY-MM-DD]","time_arrival":"[HH:MM]","total_peoples":[number],"contact_number":"[phone]"}
+2) SECOND, after ORDER_JSON is emitted, speak this confirmation out loud:
+"Perfect! Your reservation is confirmed. We look forward to seeing you. Thank you for calling, goodbye!"
+
+=== ABSOLUTE RULES ===
+- NEVER say "ORDER_JSON" out loud
+- NEVER speak confirmation before ORDER_JSON is emitted
+- Output ORDER_JSON on its own line, nothing before it except the marker
+- Output only one ORDER_JSON line for the final confirmed reservation
+- The full_name field must contain ONLY the caller's name — no other words
+- Date format must be YYYY-MM-DD
+- Time format must be HH:MM (24-hour)
+- total_peoples must be a number, not text
+- Do not add any extra text inside the JSON values
 """
 
     return f"{base}\n{reservation_instructions}"
@@ -167,7 +213,7 @@ def resolve_restaurant_id_by_phone(number: str | None) -> int | None:
 
     db = SessionLocal()
     try:
-        best_match_id = None
+        best_match_id  = None
         best_match_len = -1
         rows = (
             db.query(models.Restaurant.id, models.Restaurant.phone)
@@ -182,7 +228,7 @@ def resolve_restaurant_id_by_phone(number: str | None) -> int | None:
                 score = min(len(incoming), len(stored))
                 if score > best_match_len:
                     best_match_len = score
-                    best_match_id = rid
+                    best_match_id  = rid
         return best_match_id
     finally:
         db.close()
@@ -192,10 +238,16 @@ def save_call_log(restaurant_id, restaurant_name, caller, duration, status):
     db = SessionLocal()
     try:
         db.add(models.CallLog(
-            restaurant_id=restaurant_id, restaurant=restaurant_name,
-            caller=caller, duration=duration, status=status,
+            restaurant_id=restaurant_id,
+            restaurant=restaurant_name,
+            caller=caller,
+            duration=duration,
+            status=status,
         ))
         db.commit()
+    except Exception:
+        logger.exception("[DB] save_call_log failed")
+        db.rollback()
     finally:
         db.close()
 
@@ -246,13 +298,18 @@ def save_order(
         )
     except Exception:
         logger.exception("[ORDER] ❌ DB save FAILED")
+        db.rollback()
         raise
     finally:
         db.close()
 
 
 # ── OpenAI helpers ─────────────────────────────────────────────────────────────
-def attach_recording_to_latest_order(call_sid: str, recording_sid: str | None, recording_url: str | None) -> bool:
+def attach_recording_to_latest_order(
+    call_sid: str,
+    recording_sid: str | None,
+    recording_url: str | None,
+) -> bool:
     if not call_sid:
         return False
     db = SessionLocal()
@@ -275,6 +332,10 @@ def attach_recording_to_latest_order(call_sid: str, recording_sid: str | None, r
         if changed:
             db.commit()
         return changed
+    except Exception:
+        logger.exception("[DB] attach_recording_to_latest_order failed")
+        db.rollback()
+        return False
     finally:
         db.close()
 
@@ -284,16 +345,17 @@ def start_twilio_recording(call_sid: str) -> str | None:
         return None
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
-        rec = client.calls(call_sid).recordings.create(recording_channels="dual")
-    except TypeError:
-        rec = client.calls(call_sid).recordings.create()
+        try:
+            rec = client.calls(call_sid).recordings.create(recording_channels="dual")
+        except TypeError:
+            rec = client.calls(call_sid).recordings.create()
+        sid = str(getattr(rec, "sid", "") or "")
+        if sid:
+            logger.info("[TWILIO] 🎙 Recording started: %s (call=%s)", sid, call_sid)
+        return sid or None
     except Exception as exc:
         logger.warning("[TWILIO] ⚠ Could not start recording for %s: %s", call_sid, exc)
         return None
-    sid = str(getattr(rec, "sid", "") or "")
-    if sid:
-        logger.info("[TWILIO] 🎙 Recording started: %s (call=%s)", sid, call_sid)
-    return sid or None
 
 
 def download_twilio_recording(recording_sid: str) -> str | None:
@@ -301,8 +363,11 @@ def download_twilio_recording(recording_sid: str) -> str | None:
         return None
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    api_url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Recordings/{recording_sid}.wav"
-    auth = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    api_url = (
+        f"https://api.twilio.com/2010-04-01/Accounts/"
+        f"{TWILIO_ACCOUNT_SID}/Recordings/{recording_sid}.wav"
+    )
+    auth       = (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     last_error = None
 
     for _ in range(max(1, RECORDING_FETCH_ATTEMPTS)):
@@ -338,7 +403,7 @@ def extract_openai_error(body, fallback: str = "") -> str:
     return fallback[:300] if fallback else "Unknown error"
 
 
-def check_openai_connectivity():
+def check_openai_connectivity() -> tuple[bool, str]:
     try:
         r = requests.get(
             "https://api.openai.com/v1/models/gpt-4o-mini",
@@ -403,8 +468,12 @@ def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
             total_peoples = int(digits)
 
     missing = []
-    for fname, fval in [("full_name", full_name), ("date-arrival", date_arrival),
-                        ("time_arrival", time_arrival), ("contact_number", contact_number)]:
+    for fname, fval in [
+        ("full_name",      full_name),
+        ("date-arrival",   date_arrival),
+        ("time_arrival",   time_arrival),
+        ("contact_number", contact_number),
+    ]:
         if not fval:
             missing.append(fname)
     if total_peoples <= 0:
@@ -420,8 +489,30 @@ def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
     }, missing
 
 
+def _extract_first_json_object(text: str) -> str | None:
+    if not text:
+        return None
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    end   = -1
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end < 0:
+        return None
+    return text[start:end + 1]
+
+
 def parse_order_json(text: str) -> dict | None:
-    idx = text.find(ORDER_JSON_MARKER)
+    idx = text.rfind(ORDER_JSON_MARKER)
     if idx < 0:
         return None
 
@@ -429,30 +520,89 @@ def parse_order_json(text: str) -> dict | None:
     if tail.startswith("```"):
         nl   = tail.find("\n")
         tail = tail[nl + 1:] if nl != -1 else tail[3:]
-
-    start = tail.find("{")
-    if start < 0:
-        return None
-
-    depth = 0
-    end   = -1
-    for i in range(start, len(tail)):
-        if tail[i] == "{":
-            depth += 1
-        elif tail[i] == "}":
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-
-    if end == -1:
+    blob = _extract_first_json_object(tail)
+    if not blob:
         return None
 
     try:
-        return json.loads(tail[start: end + 1])
+        return json.loads(blob)
     except ValueError as exc:
-        logger.warning("[ORDER] JSON parse error: %s  raw=%r", exc, tail[start: end + 1][:300])
+        logger.warning("[ORDER] JSON parse error: %s  raw=%r", exc, blob[:300])
         return None
+
+
+def parse_any_json_object(text: str) -> dict | None:
+    blob = _extract_first_json_object((text or "").strip())
+    if not blob:
+        return None
+    try:
+        return json.loads(blob)
+    except ValueError as exc:
+        logger.warning("[ORDER] Generic JSON parse error: %s  raw=%r", exc, blob[:300])
+        return None
+
+
+async def extract_order_post_call(transcript: str) -> dict | None:
+    transcript = (transcript or "").strip()
+    if not transcript:
+        return None
+
+    extractor_prompt = """\
+You extract one reservation object from a call transcript.
+Return ONLY one line in exactly this format:
+ORDER_JSON: {"full_name":"...","date-arrival":"YYYY-MM-DD","time_arrival":"HH:MM","total_peoples":0,"contact_number":"..."}
+Rules:
+- No explanation
+- No markdown
+- Use exactly these keys
+- total_peoples must be a number
+- If a value is unknown, use empty string for text fields and 0 for total_peoples"""
+
+    try:
+        async with httpx.AsyncClient(timeout=POST_CALL_EXTRACT_TIMEOUT) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model":       POST_CALL_EXTRACT_MODEL,
+                    "temperature": 0,
+                    "messages": [
+                        {"role": "system", "content": extractor_prompt},
+                        {"role": "user",   "content": transcript},
+                    ],
+                },
+            )
+    except Exception as exc:
+        logger.warning("[ORDER] Post-call extractor request failed: %s", exc)
+        return None
+
+    body = {}
+    try:
+        body = r.json()
+    except ValueError:
+        pass
+
+    if r.status_code >= 400:
+        logger.warning(
+            "[ORDER] Post-call extractor HTTP %s: %s",
+            r.status_code,
+            extract_openai_error(body, r.text),
+        )
+        return None
+
+    choices = body.get("choices") or []
+    content = ((choices[0].get("message") or {}).get("content") or "") if choices else ""
+    parsed  = parse_order_json(content) or parse_any_json_object(content)
+    if not parsed:
+        logger.warning(
+            "[ORDER] Post-call extractor returned unparsable content: %r",
+            str(content)[:300],
+        )
+        return None
+    return parsed
 
 
 def texts_from_event(ev: dict) -> list[str]:
@@ -501,7 +651,8 @@ async def startup_event():
     ensure_admin_user()
 
 
-@app.get("/health/openai", response_class=JSONResponse)
+# ── Health endpoints ───────────────────────────────────────────────────────────
+@app.get("/health/openai",     response_class=JSONResponse)
 @app.get("/api/health/openai", response_class=JSONResponse)
 async def health_openai():
     ok, detail = check_openai_connectivity()
@@ -526,8 +677,8 @@ async def dashboard_page():
 @app.get("/api/recordings/{filename}")
 async def get_recording_file(filename: str):
     safe_name = Path(filename).name
-    path = (RECORDINGS_DIR / safe_name).resolve()
-    base = RECORDINGS_DIR.resolve()
+    path      = (RECORDINGS_DIR / safe_name).resolve()
+    base      = RECORDINGS_DIR.resolve()
     if not str(path).startswith(str(base)):
         raise HTTPException(status_code=404, detail="Recording not found")
     if not path.exists() or not path.is_file():
@@ -536,17 +687,22 @@ async def get_recording_file(filename: str):
 
 
 # ── Twilio webhook ─────────────────────────────────────────────────────────────
-@app.api_route("/incoming-call",                     methods=["POST"])
-@app.api_route("/incoming-call/{restaurant_id}",     methods=["POST"])
-@app.api_route("/api/incoming-call",                 methods=["POST"])
-@app.api_route("/api/incoming-call/{restaurant_id}", methods=["POST"])
+@app.api_route("/incoming-call",                     methods=["GET", "POST"])
+@app.api_route("/incoming-call/{restaurant_id}",     methods=["GET", "POST"])
+@app.api_route("/api/incoming-call",                 methods=["GET", "POST"])
+@app.api_route("/api/incoming-call/{restaurant_id}", methods=["GET", "POST"])
 async def incoming_call(request: Request, restaurant_id: int | None = None):
-    p = dict(request.query_params)
+    # ── Parse body ──────────────────────────────────────────────────────────
+    p: dict = dict(request.query_params)
+
     if request.method == "POST":
         raw_body = await request.body()
         if raw_body:
             try:
-                for key, value in parse_qsl(raw_body.decode("utf-8", errors="ignore"), keep_blank_values=True):
+                for key, value in parse_qsl(
+                    raw_body.decode("utf-8", errors="ignore"),
+                    keep_blank_values=True,
+                ):
                     if key not in p:
                         p[key] = value
             except Exception:
@@ -558,6 +714,7 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
             except Exception:
                 p = dict(request.query_params)
 
+    # ── Resolve restaurant ───────────────────────────────────────────────────
     if restaurant_id is None:
         q = str(p.get("restaurant_id") or "").strip()
         if q.isdigit():
@@ -565,15 +722,20 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
     if restaurant_id is None:
         inbound_number = str(p.get("To") or p.get("Called") or "")
-        inferred_id = resolve_restaurant_id_by_phone(inbound_number)
+        inferred_id    = resolve_restaurant_id_by_phone(inbound_number)
         if inferred_id is not None:
             restaurant_id = inferred_id
-            logger.info("[CALL] Restaurant resolved from To=%s -> restaurant_id=%s", inbound_number, restaurant_id)
+            logger.info(
+                "[CALL] Restaurant resolved from To=%s -> restaurant_id=%s",
+                inbound_number,
+                restaurant_id,
+            )
 
     caller   = str(p.get("From") or p.get("Caller") or "Unknown")
     call_sid = str(p.get("CallSid") or "")
 
     response = VoiceResponse()
+
     if restaurant_id is not None and not restaurant_exists_and_active(restaurant_id):
         response.say("Invalid restaurant. Please contact support.", voice="alice")
         response.append(Hangup())
@@ -585,7 +747,8 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         elif PRECALL_NOTICE_TEXT:
             response.say(PRECALL_NOTICE_TEXT, voice="alice")
 
-    host      = request.headers.get("host")
+    # ── Build WebSocket URL ──────────────────────────────────────────────────
+    host      = request.headers.get("host", "localhost")
     path      = request.url.path or ""
     root_path = request.scope.get("root_path") or ""
     prefix    = root_path or ("/api" if path.startswith("/api/") else "")
@@ -608,6 +771,7 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 async def chat_with_ai(data: dict, user=Depends(require_auth)):
     restaurant_id = data.get("restaurant_id")
     r_prompt      = data.get("restaurant_prompt")
+
     if not user.is_admin:
         if not user.restaurant_id:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -623,7 +787,10 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
             "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type":  "application/json",
+            },
             json={
                 "model": "gpt-4o-mini",
                 "messages": [
@@ -638,8 +805,13 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
         body = r.json()
     except ValueError:
         pass
+
     if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"OpenAI: {extract_openai_error(body, r.text)}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI: {extract_openai_error(body, r.text)}",
+        )
+
     choices = body.get("choices") or []
     reply   = ((choices[0].get("message") or {}).get("content") or "") if choices else ""
     return {"reply": str(reply)}
@@ -663,25 +835,35 @@ async def ingest_order(data: dict, user=Depends(require_auth)):
         raise HTTPException(status_code=400, detail=f"Missing: {', '.join(missing)}")
 
     raw_json = data.get("raw_json") or json.dumps(
-        {k: normalized[k] for k in ("full_name", "date-arrival", "time_arrival", "total_peoples", "contact_number")}
+        {k: normalized[k] for k in (
+            "full_name", "date-arrival", "time_arrival", "total_peoples", "contact_number"
+        )}
     )
     try:
         save_order(
-            restaurant_id, get_restaurant_name(restaurant_id),
-            str(data.get("caller") or "web"), str(data.get("call_sid") or ""),
-            normalized, raw_json,
+            restaurant_id,
+            get_restaurant_name(restaurant_id),
+            str(data.get("caller") or "web"),
+            str(data.get("call_sid") or ""),
+            normalized,
+            raw_json,
         )
     except Exception:
         raise HTTPException(status_code=500, detail="order save failed")
     return {"ok": True}
 
 
-@app.api_route("/voice-session", methods=["GET", "POST"])
+@app.api_route("/voice-session",     methods=["GET", "POST"])
 @app.api_route("/api/voice-session", methods=["GET", "POST"])
-def create_voice_session(request: Request, data: dict | None = None, user=Depends(require_auth)):
-    data          = data or {}
+async def create_voice_session(request: Request, user=Depends(require_auth)):
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
     restaurant_id = data.get("restaurant_id") or request.query_params.get("restaurant_id")
     r_prompt      = data.get("restaurant_prompt")
+
     if not user.is_admin:
         if not user.restaurant_id:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -694,21 +876,36 @@ def create_voice_session(request: Request, data: dict | None = None, user=Depend
         except (TypeError, ValueError):
             pass
 
-    r = requests.post(
-        "https://api.openai.com/v1/realtime/sessions",
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json={"model": REALTIME_MODEL, "voice": VOICE, "instructions": final_prompt},
-    )
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            "https://api.openai.com/v1/realtime/sessions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "model":        REALTIME_MODEL,
+                "voice":        VOICE,
+                "instructions": final_prompt,
+            },
+        )
+
+    body = {}
     try:
         body = r.json()
     except ValueError:
         raise HTTPException(status_code=502, detail="Invalid JSON from OpenAI")
+
     if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"OpenAI: {extract_openai_error(body, r.text)}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI: {extract_openai_error(body, r.text)}",
+        )
     if not isinstance(body, dict) or not (body.get("client_secret") or {}).get("value"):
         raise HTTPException(status_code=502, detail="Missing client_secret")
+
     body["model"] = REALTIME_MODEL
-    return body
+    return JSONResponse(content=body)
 
 
 # ── Realtime session init ──────────────────────────────────────────────────────
@@ -733,7 +930,6 @@ async def init_session(openai_ws, instructions: str):
             },
         },
     }))
-    await openai_ws.send(json.dumps({"type": "response.create"}))
 
 
 # ── WebSocket bridge ───────────────────────────────────────────────────────────
@@ -767,11 +963,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             response_cancelling = False
             start_ts            = None
             logged              = False
-            call_ending         = False
 
-            full_text   = ""
-            order_saved = False
-            arm_hangup  = False
+            full_text     = ""
+            order_saved   = False
             recording_sid = None
 
             def log_call():
@@ -797,6 +991,52 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 except Exception as e:
                     logger.debug("[TWI-SEND] %s", e)
 
+            def try_save_from_payload(payload: dict, source: str) -> bool:
+                nonlocal order_saved
+                if order_saved:
+                    return True
+                normalized, missing = normalize_reservation(payload)
+                if missing:
+                    logger.warning("[ORDER] Missing fields from %s: %s", source, missing)
+                    return False
+                raw_json = json.dumps({
+                    "full_name":      normalized["full_name"],
+                    "date-arrival":   normalized["date-arrival"],
+                    "time_arrival":   normalized["time_arrival"],
+                    "total_peoples":  normalized["total_peoples"],
+                    "contact_number": normalized["contact_number"],
+                })
+                try:
+                    save_order(
+                        restaurant_id, restaurant_name,
+                        caller, call_sid, normalized, raw_json,
+                    )
+                    order_saved = True
+                    logger.info("[ORDER] Saved from %s", source)
+                    return True
+                except Exception:
+                    logger.exception("[ORDER] try_save_from_payload failed")
+                    return False
+
+            async def finalize_order(reason: str, allow_extractor: bool) -> bool:
+                if order_saved:
+                    return True
+
+                parsed = parse_order_json(full_text)
+                if parsed:
+                    logger.info("[ORDER] Found ORDER_JSON marker during %s", reason)
+                    if try_save_from_payload(parsed, f"marker:{reason}"):
+                        return True
+
+                if not allow_extractor:
+                    return False
+
+                extracted = await extract_order_post_call(full_text)
+                if not extracted:
+                    logger.warning("[ORDER] Post-call extraction failed during %s", reason)
+                    return False
+                return try_save_from_payload(extracted, f"post-call:{reason}")
+
             async def interrupt():
                 nonlocal response_active, response_cancelling, last_assistant_item
                 if response_cancelling:
@@ -808,57 +1048,6 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 await oai({"type": "response.cancel"})
                 if stream_sid:
                     await twi({"event": "clear", "streamSid": stream_sid})
-
-            async def end_call(reason=""):
-                nonlocal call_ending
-                if call_ending:
-                    return
-                call_ending = True
-                logger.info("[CALL] ◼ Hanging up — %s", reason)
-                if call_sid:
-                    await asyncio.to_thread(complete_twilio_call, call_sid)
-                for fn in (websocket.close, openai_ws.close):
-                    try:
-                        await fn()
-                    except Exception:
-                        pass
-
-            def try_save() -> bool:
-                nonlocal order_saved
-                if order_saved:
-                    return True
-                if ORDER_JSON_MARKER not in full_text:
-                    return False
-
-                mi      = full_text.rfind(ORDER_JSON_MARKER)
-                context = full_text[max(0, mi - 20): mi + 500]
-                logger.info("[ORDER] 🔍 Marker found:\n%r", context)
-
-                parsed = parse_order_json(full_text)
-                if parsed is None:
-                    logger.info("[ORDER] ⏳ JSON incomplete — waiting")
-                    return False
-
-                logger.info("[ORDER] 📦 Parsed: %s", json.dumps(parsed, ensure_ascii=False))
-
-                normalized, missing = normalize_reservation(parsed)
-                if missing:
-                    logger.warning("[ORDER] ⚠ Missing: %s — waiting", missing)
-                    return False
-
-                raw_json = json.dumps({
-                    "full_name":      normalized["full_name"],
-                    "date-arrival":   normalized["date-arrival"],
-                    "time_arrival":   normalized["time_arrival"],
-                    "total_peoples":  normalized["total_peoples"],
-                    "contact_number": normalized["contact_number"],
-                })
-                try:
-                    save_order(restaurant_id, restaurant_name, caller, call_sid, normalized, raw_json)
-                    order_saved = True
-                    return True
-                except Exception:
-                    return False
 
             async def receive_twilio():
                 nonlocal stream_sid, start_ts, call_sid, recording_sid
@@ -873,8 +1062,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             if not call_sid:
                                 call_sid = str(ev["start"].get("callSid") or "")
                             if not recording_sid and call_sid:
-                                recording_sid = await asyncio.to_thread(start_twilio_recording, call_sid)
-                            logger.info("[CALL] ▶ Stream  sid=%s  caller=%s", stream_sid, caller)
+                                recording_sid = await asyncio.to_thread(
+                                    start_twilio_recording, call_sid
+                                )
+                            logger.info(
+                                "[CALL] ▶ Stream  sid=%s  caller=%s",
+                                stream_sid, caller,
+                            )
+                            await oai({"type": "response.create"})
 
                         elif etype == "media":
                             await oai({
@@ -884,6 +1079,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
                         elif etype == "stop":
                             logger.info("[CALL] ■ Stream stopped  sid=%s", stream_sid)
+                            await finalize_order("twilio-stop", allow_extractor=False)
                             try:
                                 await openai_ws.close()
                             except Exception:
@@ -909,7 +1105,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
-                nonlocal full_text, order_saved, arm_hangup
+                nonlocal full_text
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -927,17 +1123,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         response_cancelling = False
                         last_assistant_item = None
 
-                        if arm_hangup and not call_ending:
-                            logger.info("[CALL] ✅ Confirmation done — hanging up in 1s")
-                            await asyncio.sleep(1.0)
-                            await end_call("auto-hangup after confirmation")
-                            break
-
                     elif etype == "error":
                         err  = ev.get("error") or {}
                         code = err.get("code", "")
-                        if code in ("response_cancel_not_active", "response_already_cancelled",
-                                    "item_truncated"):
+                        if code in (
+                            "response_cancel_not_active",
+                            "response_already_cancelled",
+                            "item_truncated",
+                        ):
                             response_cancelling = False
                             continue
                         logger.error("[OAI] ❌ %s: %s", code, err.get("message", ""))
@@ -948,24 +1141,22 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if new_texts:
                         chunk = "".join(new_texts)
                         full_text += chunk
+                        # Trim to avoid unbounded growth
                         if len(full_text) > 60_000:
                             full_text = full_text[-30_000:]
                         if chunk.strip():
                             logger.info("[MODEL-TEXT] %s", chunk)
 
-                    # Try save on every chunk
+                    # ── Check for ORDER_JSON inline ──────────────────────────
                     if not order_saved and ORDER_JSON_MARKER in full_text:
-                        if try_save():
-                            logger.info("[ORDER] ✅ Saved — arming hangup")
-                            arm_hangup = True
+                        parsed = parse_order_json(full_text)
+                        if parsed:
+                            try_save_from_payload(parsed, "inline-marker")
 
-                    # Interrupt only before order saved
+                    # Interrupt assistant whenever caller starts speaking.
                     if etype == "input_audio_buffer.speech_started":
-                        if not order_saved:
-                            logger.info("[CALL] 🗣 Interrupting")
-                            await interrupt()
-                        else:
-                            logger.info("[CALL] 🗣 Ignored (post-order)")
+                        logger.info("[CALL] 🗣 Interrupting")
+                        await interrupt()
 
                     elif etype == "input_audio_buffer.speech_stopped":
                         if not response_active and not response_cancelling:
@@ -988,9 +1179,13 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 await asyncio.gather(receive_twilio(), send_twilio())
             finally:
                 log_call()
+                await finalize_order("bridge-finally", allow_extractor=True)
+
                 recording_url = None
                 if recording_sid:
-                    recording_url = await asyncio.to_thread(download_twilio_recording, recording_sid)
+                    recording_url = await asyncio.to_thread(
+                        download_twilio_recording, recording_sid
+                    )
                 if call_sid and (recording_sid or recording_url):
                     attached = await asyncio.to_thread(
                         attach_recording_to_latest_order,
@@ -1000,7 +1195,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     )
                     if attached:
                         logger.info(
-                            "[ORDER] 🎧 Recording linked to order  call_sid=%s  recording_sid=%s",
+                            "[ORDER] 🎧 Recording linked  call_sid=%s  recording_sid=%s",
                             call_sid,
                             recording_sid,
                         )
@@ -1012,7 +1207,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
         except Exception:
             pass
     except Exception:
-        logger.exception("[CALL] Bridge crashed  restaurant_id=%s  caller=%s", restaurant_id, caller)
+        logger.exception(
+            "[CALL] Bridge crashed  restaurant_id=%s  caller=%s",
+            restaurant_id, caller,
+        )
         try:
             await websocket.close()
         except Exception:
@@ -1024,7 +1222,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 @app.websocket("/api/media-stream")
 async def handle_media_stream(websocket: WebSocket):
     q = websocket.query_params.get("restaurant_id")
-    await handle_media_stream_with_id(websocket, int(q) if q and q.isdigit() else None)
+    await handle_media_stream_with_id(
+        websocket, int(q) if q and q.isdigit() else None
+    )
 
 
 @app.websocket("/media-stream/{restaurant_id}")
@@ -1038,10 +1238,13 @@ async def handle_media_stream_restaurant(websocket: WebSocket, restaurant_id: in
 @app.get("/api/media-stream")
 @app.get("/api/media-stream/{restaurant_id}")
 def media_stream_http_guard(restaurant_id: int | None = None):
-    return JSONResponse(status_code=426, content={
-        "error":  "WebSocket required",
-        "detail": "Use /incoming-call Twilio webhook to start a media stream.",
-    })
+    return JSONResponse(
+        status_code=426,
+        content={
+            "error":  "WebSocket required",
+            "detail": "Use /incoming-call Twilio webhook to start a media stream.",
+        },
+    )
 
 
 if __name__ == "__main__":
