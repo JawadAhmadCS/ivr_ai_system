@@ -61,6 +61,11 @@ RECORDING_FETCH_ATTEMPTS  = int(os.getenv("RECORDING_FETCH_ATTEMPTS", 15))
 RECORDING_FETCH_SLEEP_SEC = float(os.getenv("RECORDING_FETCH_SLEEP_SEC", 1.0))
 
 ORDER_JSON_MARKER = "ORDER_JSON:"
+PROCESS_MARKER = (os.getenv("LLM_PROCESS_TOKEN", "<process>") or "<process>").strip()
+RESERVATION_CONFIRM_TEXT = (
+    os.getenv("RESERVATION_CONFIRM_TEXT")
+    or "Your reservation is confirmed. We look forward to seeing you. Goodbye!"
+).strip()
 
 BASE_DIR        = Path(__file__).resolve().parent
 PROMPT_DIR      = BASE_DIR / "prompts"
@@ -121,8 +126,11 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     addon = (restaurant_prompt or "").strip()
     base  = f"{global_prompt}\n\n{addon}" if addon else global_prompt
 
-    reservation_instructions = """\
-
+    reservation_instructions = f"""\
+When you finish collecting all reservation details, output one machine-readable JSON block exactly once in this format:
+{ORDER_JSON_MARKER} {{"full_name":"...","date-arrival":"...","time_arrival":"...","total_peoples":2,"contact_number":"..."}}
+After the JSON block, output `{PROCESS_MARKER}` on its own line to signal backend verification and call completion.
+Do not add any extra machine tokens besides these.
 """
 
     return f"{base}\n{reservation_instructions}"
@@ -772,6 +780,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             full_text   = ""
             order_saved = False
             arm_hangup  = False
+            process_requested = False
+            confirmation_sent = False
             recording_sid = None
 
             def log_call():
@@ -910,6 +920,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
                 nonlocal full_text, order_saved, arm_hangup
+                nonlocal process_requested, confirmation_sent
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -927,7 +938,24 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         response_cancelling = False
                         last_assistant_item = None
 
-                        if arm_hangup and not call_ending:
+                        if process_requested and not order_saved and ORDER_JSON_MARKER in full_text:
+                            try_save()
+
+                        if process_requested and order_saved and not confirmation_sent:
+                            logger.info("[CALL] ✅ %s received and order verified; sending final confirmation", PROCESS_MARKER)
+                            confirmation_sent = True
+                            arm_hangup = True
+                            await oai({
+                                "type": "response.create",
+                                "response": {
+                                    "modalities": ["audio", "text"],
+                                    "instructions": f'Say exactly this sentence and nothing else: "{RESERVATION_CONFIRM_TEXT}"',
+                                },
+                            })
+                            response_active = True
+                            continue
+
+                        if arm_hangup and confirmation_sent and not call_ending:
                             logger.info("[CALL] ✅ Confirmation done — hanging up in 1s")
                             await asyncio.sleep(1.0)
                             await end_call("auto-hangup after confirmation")
@@ -953,11 +981,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         if chunk.strip():
                             logger.info("[MODEL-TEXT] %s", chunk)
 
+                    if not process_requested and PROCESS_MARKER in full_text:
+                        process_requested = True
+                        logger.info("[CALL] 🧩 Received process marker: %s", PROCESS_MARKER)
+
                     # Try save on every chunk
                     if not order_saved and ORDER_JSON_MARKER in full_text:
                         if try_save():
-                            logger.info("[ORDER] ✅ Saved — arming hangup")
-                            arm_hangup = True
+                            logger.info("[ORDER] ✅ Saved and verified in DB")
 
                     # Interrupt only before order saved
                     if etype == "input_audio_buffer.speech_started":
