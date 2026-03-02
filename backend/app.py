@@ -122,7 +122,7 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
     base  = f"{global_prompt}\n\n{addon}" if addon else global_prompt
 
     reservation_instructions = """\
-
+alway speak english
 """
 
     return f"{base}\n{reservation_instructions}"
