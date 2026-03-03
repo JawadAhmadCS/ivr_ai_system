@@ -914,6 +914,21 @@ table.tbl {
   padding:12px;
 }
 
+.status-btn {
+  background:transparent;
+  border:none;
+  padding:0;
+  cursor:pointer;
+}
+
+.status-btn .badge { pointer-events:none; }
+.status-btn:hover .badge { filter:brightness(1.08); }
+.status-btn:focus-visible {
+  outline:2px solid var(--blue);
+  outline-offset:3px;
+  border-radius:18px;
+}
+
 /* ── LANG SWITCH ── */
 #lang-switch {
   position:fixed;
@@ -1709,6 +1724,11 @@ async function loadOrders() {
       const timeArrival  = o.time_arrival   || o['time-arrival'] || o.house_number   || '';
       const totalPeoples = o.total_peoples  ?? o.ordered_items  ?? '';
       const contact      = o.contact_number || o.payment_method || '';
+      const statusNorm   = normalizeOrderStatus(o.status);
+      const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
+      const statusCell   = canQuickDone
+        ? `<button class="status-btn" onclick="quickCompleteOrder(${o.id})" title="Click to mark completed">${orderStatusBadge(statusNorm)}</button>`
+        : orderStatusBadge(statusNorm);
       const rec          = recUrl(o.recording_url);
       const recCell      = rec
         ? `<audio controls preload="none" src="${esc(rec)}" style="width:170px;height:28px"></audio>`
@@ -1723,7 +1743,7 @@ async function loadOrders() {
         <td>${monospace(totalPeoples)}</td>
         <td>${monospace(contact)}</td>
         <td>${recCell}</td>
-        <td>${orderStatusBadge(o.status)}</td>
+        <td>${statusCell}</td>
         <td>${dim(o.created)}</td>
         <td>
           <div style="display:flex;gap:6px">
@@ -1733,6 +1753,29 @@ async function loadOrders() {
       </tr>`;
     }).join('');
   } catch {}
+}
+
+async function quickCompleteOrder(id) {
+  if (!me?.is_admin) { toast('Only admin can update status', 'err'); return; }
+  const o = oCache.find(x => Number(x.id) === Number(id));
+  if (!o) { toast('Order not found', 'err'); return; }
+  if (normalizeOrderStatus(o.status) === ORDER_STATUS_DONE) {
+    toast('Already completed');
+    return;
+  }
+  const ok = confirm(`Mark order #${id} as "Completed by Admin"?`);
+  if (!ok) return;
+  try {
+    const r = await api(`${API_BASE}/orders/${id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ status: ORDER_STATUS_DONE })
+    });
+    if (!r.ok) throw new Error();
+    o.status = ORDER_STATUS_DONE;
+    await loadOrders();
+    toast('Status updated');
+  } catch { toast('Status update failed', 'err'); }
 }
 
 function openOrderModal(id) {
