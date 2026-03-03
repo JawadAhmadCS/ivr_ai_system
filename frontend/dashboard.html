@@ -1678,6 +1678,8 @@ async function loadStats() {
     document.getElementById('sCalls').textContent  = s.calls ?? 0;
     document.getElementById('sMissed').textContent = s.missed ?? 0;
     document.getElementById('sDur').textContent    = fmtDur(s.total_duration ?? 0);
+    document.getElementById('sUsage').textContent  = Number(s.api_usage_tokens ?? 0).toLocaleString();
+    document.getElementById('sCost').textContent   = `$${Number(s.api_cost_usd ?? 0).toFixed(4)}`;
   } catch {}
 }
 

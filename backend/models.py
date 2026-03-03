@@ -69,3 +69,18 @@ class AuthToken(Base):
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False)
 
+
+class ApiUsageLog(Base):
+    __tablename__ = "api_usage_logs"
+    id = Column(Integer, primary_key=True)
+    restaurant_id = Column(Integer, index=True, nullable=True)
+    endpoint = Column(String(80), nullable=False)
+    model = Column(String(120), nullable=False)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cached_input_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    meta_json = Column(Text, nullable=True)
+    created = Column(DateTime, default=datetime.utcnow)
+

@@ -33,6 +33,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return val.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float(name: str, default: float) -> float:
+    val = os.getenv(name)
+    if val is None or not str(val).strip():
+        return default
+    try:
+        return float(str(val).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 # ── Configuration ──────────────────────────────────────────────────────────────
 OPENAI_API_KEY                    = os.getenv("OPENAI_API_KEY")
 PORT                              = int(os.getenv("PORT", 5050))
@@ -61,6 +71,17 @@ RECORDING_FETCH_ATTEMPTS  = int(os.getenv("RECORDING_FETCH_ATTEMPTS", 15))
 RECORDING_FETCH_SLEEP_SEC = float(os.getenv("RECORDING_FETCH_SLEEP_SEC", 1.0))
 POST_CALL_EXTRACT_MODEL   = os.getenv("POST_CALL_EXTRACT_MODEL", "gpt-4o-mini")
 POST_CALL_EXTRACT_TIMEOUT = float(os.getenv("POST_CALL_EXTRACT_TIMEOUT", 60))
+
+OPENAI_PRICE_DEFAULT_INPUT_PER_1M = _env_float("OPENAI_PRICE_DEFAULT_INPUT_PER_1M", 0.0)
+OPENAI_PRICE_DEFAULT_OUTPUT_PER_1M = _env_float("OPENAI_PRICE_DEFAULT_OUTPUT_PER_1M", 0.0)
+OPENAI_PRICE_CACHED_INPUT_RATIO = _env_float("OPENAI_PRICE_CACHED_INPUT_RATIO", 1.0)
+
+OPENAI_PRICE_GPT4O_MINI_INPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_MINI_INPUT_PER_1M", 0.15)
+OPENAI_PRICE_GPT4O_MINI_OUTPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_MINI_OUTPUT_PER_1M", 0.60)
+OPENAI_PRICE_GPT4O_INPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_INPUT_PER_1M", 2.50)
+OPENAI_PRICE_GPT4O_OUTPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_OUTPUT_PER_1M", 10.00)
+OPENAI_PRICE_GPT4O_REALTIME_INPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_REALTIME_INPUT_PER_1M", 5.00)
+OPENAI_PRICE_GPT4O_REALTIME_OUTPUT_PER_1M = _env_float("OPENAI_PRICE_GPT4O_REALTIME_OUTPUT_PER_1M", 20.00)
 
 ORDER_JSON_MARKER = "ORDER_JSON:"
 
@@ -263,6 +284,109 @@ def save_order(
 
 
 # ── OpenAI helpers ─────────────────────────────────────────────────────────────
+def _usage_int(value) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_usage(usage: dict | None) -> tuple[int, int, int, int]:
+    if not isinstance(usage, dict):
+        return 0, 0, 0, 0
+
+    input_tokens = _usage_int(usage.get("prompt_tokens"))
+    if not input_tokens:
+        input_tokens = _usage_int(usage.get("input_tokens"))
+
+    output_tokens = _usage_int(usage.get("completion_tokens"))
+    if not output_tokens:
+        output_tokens = _usage_int(usage.get("output_tokens"))
+
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        details = usage.get("input_token_details")
+    cached_input_tokens = _usage_int((details or {}).get("cached_tokens"))
+    cached_input_tokens = min(cached_input_tokens, input_tokens)
+
+    total_tokens = _usage_int(usage.get("total_tokens"))
+    if not total_tokens:
+        total_tokens = input_tokens + output_tokens
+
+    return input_tokens, output_tokens, cached_input_tokens, total_tokens
+
+
+def _price_rates_for_model(model: str | None) -> tuple[float, float]:
+    m = (model or "").strip().lower()
+    if m.startswith("gpt-4o-mini"):
+        return OPENAI_PRICE_GPT4O_MINI_INPUT_PER_1M, OPENAI_PRICE_GPT4O_MINI_OUTPUT_PER_1M
+    if "realtime" in m:
+        return OPENAI_PRICE_GPT4O_REALTIME_INPUT_PER_1M, OPENAI_PRICE_GPT4O_REALTIME_OUTPUT_PER_1M
+    if m.startswith("gpt-4o"):
+        return OPENAI_PRICE_GPT4O_INPUT_PER_1M, OPENAI_PRICE_GPT4O_OUTPUT_PER_1M
+    return OPENAI_PRICE_DEFAULT_INPUT_PER_1M, OPENAI_PRICE_DEFAULT_OUTPUT_PER_1M
+
+
+def _estimate_cost_usd(
+    model: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    cached_input_tokens: int,
+) -> float:
+    in_rate, out_rate = _price_rates_for_model(model)
+    cached = min(max(0, cached_input_tokens), max(0, input_tokens))
+    non_cached = max(0, input_tokens - cached)
+    cached_rate = max(0.0, in_rate * max(0.0, OPENAI_PRICE_CACHED_INPUT_RATIO))
+    total = (
+        (non_cached * in_rate)
+        + (cached * cached_rate)
+        + (max(0, output_tokens) * out_rate)
+    ) / 1_000_000.0
+    return round(float(total), 8)
+
+
+def save_api_usage(
+    *,
+    restaurant_id: int | None,
+    endpoint: str,
+    model: str | None,
+    usage: dict | None,
+    call_sid: str | None = None,
+    meta: dict | None = None,
+) -> None:
+    input_tokens, output_tokens, cached_input_tokens, total_tokens = _parse_usage(usage)
+    if total_tokens <= 0 and input_tokens <= 0 and output_tokens <= 0:
+        return
+
+    cost_usd = _estimate_cost_usd(model, input_tokens, output_tokens, cached_input_tokens)
+    payload_meta = {}
+    if call_sid:
+        payload_meta["call_sid"] = str(call_sid)
+    if isinstance(meta, dict) and meta:
+        payload_meta.update(meta)
+    meta_json = json.dumps(payload_meta) if payload_meta else None
+
+    db = SessionLocal()
+    try:
+        db.add(models.ApiUsageLog(
+            restaurant_id=restaurant_id,
+            endpoint=str(endpoint or "")[:80] or "unknown",
+            model=str(model or "unknown")[:120],
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_input_tokens=cached_input_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost_usd,
+            meta_json=meta_json,
+        ))
+        db.commit()
+    except Exception:
+        logger.exception("[USAGE] Failed to save usage log")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def attach_recording_to_latest_order(
     call_sid: str,
     recording_sid: str | None,
@@ -500,7 +624,12 @@ def parse_any_json_object(text: str) -> dict | None:
         return None
 
 
-async def extract_order_post_call(transcript: str) -> dict | None:
+async def extract_order_post_call(
+    transcript: str,
+    *,
+    restaurant_id: int | None = None,
+    call_sid: str | None = None,
+) -> dict | None:
     transcript = (transcript or "").strip()
     if not transcript:
         return None
@@ -550,6 +679,15 @@ Rules:
             extract_openai_error(body, r.text),
         )
         return None
+
+    save_api_usage(
+        restaurant_id=restaurant_id,
+        endpoint="chat.completions",
+        model=POST_CALL_EXTRACT_MODEL,
+        usage=body.get("usage"),
+        call_sid=call_sid,
+        meta={"source": "post_call_extractor"},
+    )
 
     choices = body.get("choices") or []
     content = ((choices[0].get("message") or {}).get("content") or "") if choices else ""
@@ -770,6 +908,14 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
             detail=f"OpenAI: {extract_openai_error(body, r.text)}",
         )
 
+    save_api_usage(
+        restaurant_id=restaurant_id,
+        endpoint="chat.completions",
+        model="gpt-4o-mini",
+        usage=body.get("usage"),
+        meta={"source": "chat_endpoint"},
+    )
+
     choices = body.get("choices") or []
     reply   = ((choices[0].get("message") or {}).get("content") or "") if choices else ""
     return {"reply": str(reply)}
@@ -989,7 +1135,11 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 if not allow_extractor:
                     return False
 
-                extracted = await extract_order_post_call(full_text)
+                extracted = await extract_order_post_call(
+                    full_text,
+                    restaurant_id=restaurant_id,
+                    call_sid=call_sid,
+                )
                 if not extracted:
                     logger.warning("[ORDER] Post-call extraction failed during %s", reason)
                     return False
@@ -1077,6 +1227,18 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         response_cancelling = False
 
                     elif etype in {"response.done", "response.cancelled"}:
+                        if etype == "response.done":
+                            usage_obj = (ev.get("response") or {}).get("usage") or ev.get("usage")
+                            if isinstance(usage_obj, dict):
+                                await asyncio.to_thread(
+                                    save_api_usage,
+                                    restaurant_id=restaurant_id,
+                                    endpoint="realtime.response",
+                                    model=REALTIME_MODEL,
+                                    usage=usage_obj,
+                                    call_sid=call_sid,
+                                    meta={"source": "twilio_stream"},
+                                )
                         response_active     = False
                         response_cancelling = False
                         last_assistant_item = None

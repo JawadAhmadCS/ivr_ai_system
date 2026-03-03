@@ -17,6 +17,8 @@ def stats(user=Depends(require_auth)):
             missed = db.query(models.CallLog).filter_by(status="missed").count()
             total_duration = db.query(func.sum(models.CallLog.duration)).scalar()
             avg_duration = db.query(func.avg(models.CallLog.duration)).scalar()
+            api_usage_tokens = db.query(func.sum(models.ApiUsageLog.total_tokens)).scalar()
+            api_cost_usd = db.query(func.sum(models.ApiUsageLog.cost_usd)).scalar()
         else:
             if not user.restaurant_id:
                 return {
@@ -25,10 +27,15 @@ def stats(user=Depends(require_auth)):
                     "missed": 0,
                     "total_duration": 0.0,
                     "avg_duration": 0.0,
+                    "api_usage_tokens": 0,
+                    "api_cost_usd": 0.0,
                 }
             r = db.get(models.Restaurant, user.restaurant_id)
             rname = r.name if r else None
             base = db.query(models.CallLog)
+            usage_base = db.query(models.ApiUsageLog).filter(
+                models.ApiUsageLog.restaurant_id == user.restaurant_id
+            )
             if rname:
                 base = base.filter(
                     (models.CallLog.restaurant_id == user.restaurant_id)
@@ -41,12 +48,16 @@ def stats(user=Depends(require_auth)):
             missed = base.filter_by(status="missed").count()
             total_duration = base.with_entities(func.sum(models.CallLog.duration)).scalar()
             avg_duration = base.with_entities(func.avg(models.CallLog.duration)).scalar()
+            api_usage_tokens = usage_base.with_entities(func.sum(models.ApiUsageLog.total_tokens)).scalar()
+            api_cost_usd = usage_base.with_entities(func.sum(models.ApiUsageLog.cost_usd)).scalar()
         return {
             "restaurants": total_restaurants,
             "calls": total_calls,
             "missed": missed,
             "total_duration": float(total_duration or 0),
             "avg_duration": float(avg_duration or 0),
+            "api_usage_tokens": int(api_usage_tokens or 0),
+            "api_cost_usd": float(api_cost_usd or 0),
         }
     finally:
         db.close()
