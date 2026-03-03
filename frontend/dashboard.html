@@ -929,6 +929,8 @@ table.tbl {
   border-radius:18px;
 }
 
+.status-confirm-card { width:min(460px,92vw); }
+
 /* ── LANG SWITCH ── */
 #lang-switch {
   position:fixed;
@@ -1118,6 +1120,18 @@ table.tbl {
         <button class="btn btn-secondary btn-sm" onclick="closeOrderModal()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveOrderModal()">Save Changes</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status Confirm Modal -->
+<div id="statusConfirmOverlay" class="modal-overlay hidden">
+  <div class="modal-card status-confirm-card">
+    <div class="modal-title">Mark as Completed</div>
+    <div class="modal-sub" id="statusConfirmText">Are you sure you want to complete this order?</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm" onclick="closeStatusConfirm()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmStatusComplete()">OK</button>
     </div>
   </div>
 </div>
@@ -1469,6 +1483,7 @@ let uCache  = [];
 let selId   = null;
 let editUid = null;
 let editOrderId = null;
+let statusConfirmOrderId = null;
 let assignOpen = false;
 let assignRid  = null;
 let collapsed  = localStorage.getItem('sb_col') === '1';
@@ -1755,7 +1770,7 @@ async function loadOrders() {
   } catch {}
 }
 
-async function quickCompleteOrder(id) {
+function quickCompleteOrder(id) {
   if (!me?.is_admin) { toast('Only admin can update status', 'err'); return; }
   const o = oCache.find(x => Number(x.id) === Number(id));
   if (!o) { toast('Order not found', 'err'); return; }
@@ -1763,8 +1778,19 @@ async function quickCompleteOrder(id) {
     toast('Already completed');
     return;
   }
-  const ok = confirm(`Mark order #${id} as "Completed by Admin"?`);
-  if (!ok) return;
+  statusConfirmOrderId = Number(id);
+  document.getElementById('statusConfirmText').textContent = `Mark order #${id} as "Completed by Admin"?`;
+  document.getElementById('statusConfirmOverlay').classList.remove('hidden');
+}
+
+function closeStatusConfirm() {
+  statusConfirmOrderId = null;
+  document.getElementById('statusConfirmOverlay').classList.add('hidden');
+}
+
+async function confirmStatusComplete() {
+  const id = statusConfirmOrderId;
+  if (!id) return;
   try {
     const r = await api(`${API_BASE}/orders/${id}`, {
       method:'PUT',
@@ -1772,7 +1798,9 @@ async function quickCompleteOrder(id) {
       body:JSON.stringify({ status: ORDER_STATUS_DONE })
     });
     if (!r.ok) throw new Error();
-    o.status = ORDER_STATUS_DONE;
+    const o = oCache.find(x => Number(x.id) === Number(id));
+    if (o) o.status = ORDER_STATUS_DONE;
+    closeStatusConfirm();
     await loadOrders();
     toast('Status updated');
   } catch { toast('Status update failed', 'err'); }
@@ -2183,10 +2211,15 @@ document.getElementById('orderOverlay').addEventListener('click', e => {
   if (e.target.id==='orderOverlay') closeOrderModal();
 });
 
+document.getElementById('statusConfirmOverlay').addEventListener('click', e => {
+  if (e.target.id==='statusConfirmOverlay') closeStatusConfirm();
+});
+
 document.addEventListener('keydown', e => {
   if (e.key==='Escape') {
     closeEditUser();
     closeOrderModal();
+    closeStatusConfirm();
   }
 });
 
