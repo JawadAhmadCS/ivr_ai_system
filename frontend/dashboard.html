@@ -527,6 +527,49 @@ select option { background:var(--surface); }
   gap:13px;
 }
 
+.prompt-tools {
+  display:flex;
+  justify-content:flex-end;
+  margin:-2px 0 8px;
+}
+
+.prompt-tag {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid rgba(59,130,246,.25);
+  background:var(--blue-dim);
+  color:#93c5fd;
+  border-radius:999px;
+  padding:5px 11px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.5px;
+  text-transform:uppercase;
+  cursor:pointer;
+  transition:all .16s;
+}
+
+.prompt-tag:hover {
+  border-color:rgba(59,130,246,.5);
+  box-shadow:0 0 14px rgba(59,130,246,.2);
+}
+
+.prompt-tag:disabled {
+  opacity:.7;
+  cursor:wait;
+  box-shadow:none;
+}
+
+.prompt-tag.loading::before {
+  content:'';
+  width:10px; height:10px;
+  border:2px solid rgba(147,197,253,.35);
+  border-top-color:#93c5fd;
+  border-radius:50%;
+  animation:spin .65s linear infinite;
+}
+
 /* ── BUTTONS ── */
 .btn {
   display:inline-flex;
@@ -1327,6 +1370,9 @@ table.tbl {
           </div>
           <div class="form-group">
             <label class="form-label">IVR Prompt</label>
+            <div class="prompt-tools">
+              <button type="button" class="prompt-tag" data-opt-target="rprompt" onclick="optimizePromptField('rprompt', this)">Optimize</button>
+            </div>
             <textarea id="rprompt" placeholder="Custom instructions for this location..."></textarea>
           </div>
           <div class="btn-row">
@@ -2058,6 +2104,46 @@ function populateRestaurantSelect() {
   s.innerHTML = rCache.map(r => `<option value="${r.id}">${esc(r.name||'Unnamed')}</option>`).join('');
 }
 
+function setOptimizeBtnState(btn, loading) {
+  if (!btn) return;
+  if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent.trim() || 'Optimize';
+  btn.disabled = !!loading;
+  btn.classList.toggle('loading', !!loading);
+  btn.textContent = loading ? 'Optimizing' : btn.dataset.defaultLabel;
+}
+
+async function optimizePromptField(fieldId, btn) {
+  const input = document.getElementById(fieldId);
+  if (!input) { toast('Prompt field not found', 'err'); return; }
+
+  const sourcePrompt = input.value.trim();
+  if (!sourcePrompt) {
+    toast('Enter prompt first', 'err');
+    input.focus();
+    return;
+  }
+
+  const optimizeBtn = btn || [...document.querySelectorAll('.prompt-tag')]
+    .find(el => el.dataset.optTarget === fieldId);
+  setOptimizeBtnState(optimizeBtn, true);
+
+  try {
+    const res = await api(`${API_BASE}/prompt/optimize-restaurant`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ prompt:sourcePrompt })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.prompt) throw new Error(data.detail || 'Optimization failed');
+    input.value = String(data.prompt).trim();
+    toast('Prompt optimized ✓');
+  } catch (e) {
+    toast(e.message || 'Optimization failed', 'err');
+  } finally {
+    setOptimizeBtnState(optimizeBtn, false);
+  }
+}
+
 async function addRestaurant() {
   const name = document.getElementById('rname').value.trim();
   if (!name) { toast('Name is required', 'err'); return; }
@@ -2392,6 +2478,9 @@ function openR(id, silent) {
       </div>
       <div class="form-group">
         <label class="form-label">IVR Prompt</label>
+        <div class="prompt-tools">
+          <button type="button" class="prompt-tag" data-opt-target="rpr-${r.id}" onclick="optimizePromptField('rpr-${r.id}', this)">Optimize</button>
+        </div>
         <textarea id="rpr-${r.id}">${esc(r.ivr_text||'')}</textarea>
       </div>
       <div class="btn-row">
