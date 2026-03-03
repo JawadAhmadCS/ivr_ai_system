@@ -872,6 +872,48 @@ table.tbl {
 .modal-actions { display:flex; gap:9px; justify-content:flex-end; margin-top:6px; }
 .modal-err { color:var(--red); font-size:12.5px; margin-top:8px; min-height:16px; }
 
+/* -- ORDER EDIT MODAL -- */
+.order-modal-card {
+  width:min(760px,95vw);
+  max-height:88vh;
+  overflow:auto;
+}
+
+.order-modal-meta {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:8px;
+  margin-bottom:14px;
+}
+
+.order-modal-kv {
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  padding:9px 10px;
+}
+
+.order-modal-k {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:var(--text3);
+  text-transform:uppercase;
+  letter-spacing:.8px;
+  margin-bottom:4px;
+}
+
+.order-modal-v {
+  font-size:13.5px;
+  font-weight:500;
+}
+
+.order-recording-box {
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:12px;
+}
+
 /* ── LANG SWITCH ── */
 #lang-switch {
   position:fixed;
@@ -923,6 +965,7 @@ table.tbl {
   .split { grid-template-columns:1fr; }
   .form-row { grid-template-columns:1fr; }
   .main { padding:20px; }
+  .order-modal-card { width:min(95vw,760px); }
 }
 
 @media (max-width: 640px) {
@@ -979,6 +1022,87 @@ table.tbl {
     <div class="modal-actions">
       <button class="btn btn-secondary btn-sm" onclick="closeEditUser()" data-i18n="Cancel">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="saveEditUser()" data-i18n="Save Changes">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order Edit Modal -->
+<div id="orderOverlay" class="modal-overlay hidden">
+  <div class="modal-card order-modal-card">
+    <div class="modal-title">Edit Reservation</div>
+    <div class="modal-sub">Update reservation details, status, and recording</div>
+
+    <div class="order-modal-meta">
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Order</div>
+        <div class="order-modal-v" id="orderMetaId">-</div>
+      </div>
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Restaurant</div>
+        <div class="order-modal-v" id="orderMetaRestaurant">-</div>
+      </div>
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Created</div>
+        <div class="order-modal-v" id="orderMetaCreated">-</div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Customer Name</label>
+        <input id="orderEditName" placeholder="Customer full name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Order Type</label>
+        <input id="orderEditType" placeholder="reservation">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Arrival Date</label>
+        <input id="orderEditDate" placeholder="YYYY-MM-DD">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Arrival Time</label>
+        <input id="orderEditTime" placeholder="HH:MM">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Guests</label>
+        <input id="orderEditGuests" placeholder="e.g. 4">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contact Number</label>
+        <input id="orderEditPhone" placeholder="+1 (555) 000-0000">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select id="orderEditStatus">
+          <option value="pending_admin_review">Admin Review Pending</option>
+          <option value="admin_completed">Completed by Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Recording</label>
+        <div class="order-recording-box" id="orderRecordingBox">
+          <span style="color:var(--text3)">No recording attached</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="orderEditErr" class="modal-err"></div>
+    <div class="modal-actions" style="justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-danger btn-sm" onclick="deleteOrderFromModal()">Delete Order</button>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-secondary btn-sm" onclick="closeOrderModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveOrderModal()">Save Changes</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1329,12 +1453,15 @@ let oCache  = [];
 let uCache  = [];
 let selId   = null;
 let editUid = null;
+let editOrderId = null;
 let assignOpen = false;
 let assignRid  = null;
 let collapsed  = localStorage.getItem('sb_col') === '1';
 let inited  = false;
 
 const ORDER_MARKER = 'ORDER_JSON:';
+const ORDER_STATUS_PENDING = 'pending_admin_review';
+const ORDER_STATUS_DONE = 'admin_completed';
 let oc = { buf:'', tail:'', done:false };
 
 let vs = { pc:null, stream:null, audio:null, dc:null, on:false };
@@ -1462,10 +1589,29 @@ function statusBadge(s) {
 
 function orderStatusBadge(s) {
   if (!s) return `<span class="badge badge-amber">Unknown</span>`;
-  const sl = s.toLowerCase();
-  if (sl.includes('complet')) return `<span class="badge badge-green">${esc(s)}</span>`;
-  if (sl.includes('incompl')) return `<span class="badge badge-amber">${esc(s)}</span>`;
-  return `<span class="badge badge-blue">${esc(s)}</span>`;
+  const norm = normalizeOrderStatus(s);
+  const label = orderStatusLabel(norm);
+  if (norm === ORDER_STATUS_DONE) return `<span class="badge badge-green">${esc(label)}</span>`;
+  if (norm === ORDER_STATUS_PENDING) return `<span class="badge badge-amber">${esc(label)}</span>`;
+  return `<span class="badge badge-blue">${esc(label)}</span>`;
+}
+
+function normalizeOrderStatus(s) {
+  const raw = String(s || '').trim().toLowerCase();
+  if (!raw) return ORDER_STATUS_PENDING;
+  if (raw === ORDER_STATUS_PENDING || raw.includes('pending') || raw.includes('review') || raw.includes('incompl')) {
+    return ORDER_STATUS_PENDING;
+  }
+  if (raw === ORDER_STATUS_DONE || raw.includes('completed') || raw.includes('complet')) {
+    return ORDER_STATUS_DONE;
+  }
+  return ORDER_STATUS_PENDING;
+}
+
+function orderStatusLabel(s) {
+  if (s === ORDER_STATUS_PENDING) return 'Admin Review Pending';
+  if (s === ORDER_STATUS_DONE) return 'Completed by Admin';
+  return s || 'Unknown';
 }
 
 function monospace(v) {
@@ -1581,8 +1727,7 @@ async function loadOrders() {
         <td>${dim(o.created)}</td>
         <td>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-secondary btn-xs" onclick="editOrder(${o.id})">Edit</button>
-            <button class="btn btn-danger btn-xs" onclick="deleteOrder(${o.id})">Delete</button>
+            <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
           </div>
         </td>
       </tr>`;
@@ -1590,35 +1735,117 @@ async function loadOrders() {
   } catch {}
 }
 
-async function editOrder(id) {
+function openOrderModal(id) {
   const o = oCache.find(x => Number(x.id) === Number(id));
   if (!o) { toast('Order not found', 'err'); return; }
-  const fn  = prompt('Customer name',   o.full_name ?? '');     if (fn  === null) return;
-  const da  = prompt('Arrival date',    o.address ?? '');       if (da  === null) return;
-  const ta  = prompt('Arrival time',    o.house_number ?? '');  if (ta  === null) return;
-  const tp  = prompt('Total people',    o.ordered_items ?? ''); if (tp  === null) return;
-  const cn  = prompt('Contact number',  o.payment_method ?? '');if (cn  === null) return;
-  const st  = prompt('Status',          o.status ?? 'completed');if (st === null) return;
+
+  editOrderId = o.id;
+  document.getElementById('orderMetaId').textContent = `#${o.id}`;
+  document.getElementById('orderMetaRestaurant').textContent = o.restaurant || '-';
+  document.getElementById('orderMetaCreated').textContent = o.created || '-';
+  document.getElementById('orderEditName').value = o.full_name ?? '';
+  document.getElementById('orderEditType').value = o.order_type ?? '';
+  document.getElementById('orderEditDate').value = o['date-arrival'] || o.date_arrival || o.address || '';
+  document.getElementById('orderEditTime').value = o.time_arrival || o['time-arrival'] || o.house_number || '';
+  document.getElementById('orderEditGuests').value = o.total_peoples ?? o.ordered_items ?? '';
+  document.getElementById('orderEditPhone').value = o.contact_number || o.payment_method || '';
+  document.getElementById('orderEditStatus').value = normalizeOrderStatus(o.status);
+  document.getElementById('orderEditErr').textContent = '';
+  setOrderRecordingBox(o);
+  document.getElementById('orderOverlay').classList.remove('hidden');
+  document.getElementById('orderEditName').focus();
+}
+
+function closeOrderModal() {
+  editOrderId = null;
+  document.getElementById('orderEditErr').textContent = '';
+  document.getElementById('orderOverlay').classList.add('hidden');
+}
+
+function setOrderRecordingBox(order) {
+  const box = document.getElementById('orderRecordingBox');
+  const rec = recUrl(order?.recording_url);
+  if (!rec) {
+    box.innerHTML = `<span style="color:var(--text3)">No recording attached</span>`;
+    return;
+  }
+  box.innerHTML = `
+    <audio controls preload="none" src="${esc(rec)}" style="width:100%;max-width:340px;height:32px"></audio>
+    <div class="btn-row" style="margin-top:10px">
+      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">Open File</a>
+      <button class="btn btn-danger btn-xs" onclick="deleteOrderRecordingFromModal()">Delete Recording</button>
+    </div>`;
+}
+
+async function saveOrderModal() {
+  if (!editOrderId) return;
+  const err = document.getElementById('orderEditErr');
+  err.textContent = '';
+  const payload = {
+    full_name: document.getElementById('orderEditName').value.trim(),
+    order_type: document.getElementById('orderEditType').value.trim() || 'reservation',
+    date_arrival: document.getElementById('orderEditDate').value.trim(),
+    time_arrival: document.getElementById('orderEditTime').value.trim(),
+    total_peoples: document.getElementById('orderEditGuests').value.trim(),
+    contact_number: document.getElementById('orderEditPhone').value.trim(),
+    status: document.getElementById('orderEditStatus').value
+  };
+
+  if (!payload.full_name) {
+    err.textContent = 'Customer name is required';
+    return;
+  }
   try {
-    const r = await api(`${API_BASE}/orders/${id}`, {
+    const r = await api(`${API_BASE}/orders/${editOrderId}`, {
       method:'PUT',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ full_name:fn, date_arrival:da, time_arrival:ta, total_peoples:tp, contact_number:cn, status:st })
+      body:JSON.stringify(payload)
     });
-    if (!r.ok) throw new Error();
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.detail || 'Update failed');
+    }
+    await loadOrders();
+    closeOrderModal();
     toast('Order updated ✓');
-    loadOrders();
-  } catch { toast('Update failed', 'err'); }
+  } catch (e) { err.textContent = e.message || 'Update failed'; }
+}
+
+async function deleteOrderRecordingFromModal() {
+  if (!editOrderId) return;
+  if (!confirm(`Delete recording from order #${editOrderId}?`)) return;
+  try {
+    const r = await api(`${API_BASE}/orders/${editOrderId}/recording`, { method:'DELETE' });
+    if (!r.ok) throw new Error();
+    const o = oCache.find(x => Number(x.id) === Number(editOrderId));
+    if (o) {
+      o.recording_url = '';
+      o.recording_sid = '';
+      setOrderRecordingBox(o);
+    }
+    await loadOrders();
+    toast('Recording deleted');
+  } catch { toast('Failed to delete recording', 'err'); }
 }
 
 async function deleteOrder(id) {
-  if (!confirm(`Delete order #${id}? This cannot be undone.`)) return;
+  if (!confirm(`Delete order #${id}? This cannot be undone.`)) return false;
   try {
     const r = await api(`${API_BASE}/orders/${id}`, { method:'DELETE' });
     if (!r.ok) throw new Error();
+    await loadOrders();
     toast('Order deleted');
-    loadOrders();
-  } catch { toast('Delete failed', 'err'); }
+    return true;
+  } catch {
+    toast('Delete failed', 'err');
+    return false;
+  }
+}
+
+async function deleteOrderFromModal() {
+  if (!editOrderId) return;
+  const ok = await deleteOrder(editOrderId);
+  if (ok) closeOrderModal();
 }
 
 // ─── ORDER CAPTURE (from realtime events) ────────────────────────────────────
@@ -1909,7 +2136,16 @@ document.getElementById('editUserOverlay').addEventListener('click', e => {
   if (e.target.id==='editUserOverlay') closeEditUser();
 });
 
-document.addEventListener('keydown', e => { if (e.key==='Escape') closeEditUser(); });
+document.getElementById('orderOverlay').addEventListener('click', e => {
+  if (e.target.id==='orderOverlay') closeOrderModal();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') {
+    closeEditUser();
+    closeOrderModal();
+  }
+});
 
 document.getElementById('editPassword').addEventListener('keydown', e => { if (e.key==='Enter') saveEditUser(); });
 

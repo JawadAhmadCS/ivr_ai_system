@@ -242,7 +242,7 @@ def save_order(
             house_number=normalized["time_arrival"],
             ordered_items=str(normalized["total_peoples"]),
             payment_method=normalized["contact_number"],
-            status="completed",
+            status="pending_admin_review",
             raw_json=raw_json,
             recording_sid=recording_sid,
             recording_url=recording_url,
@@ -1208,3 +1208,4 @@ def media_stream_http_guard(restaurant_id: int | None = None):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)
+

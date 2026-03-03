@@ -1,3 +1,6 @@
+from pathlib import Path
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -6,6 +9,7 @@ import models
 from auth import require_auth
 
 router = APIRouter(prefix="/orders")
+RECORDINGS_DIR = (Path(__file__).resolve().parent.parent / "recordings").resolve()
 
 
 class OrderUpdatePayload(BaseModel):
@@ -50,6 +54,34 @@ def _can_access_order(db, user, order: models.Order) -> bool:
     r = db.get(models.Restaurant, user.restaurant_id)
     rname = r.name if r else None
     return bool(rname and order.restaurant == rname)
+
+
+def _delete_local_recording_file(recording_url: str | None) -> bool:
+    if not recording_url:
+        return False
+    raw = str(recording_url).strip()
+    if not raw:
+        return False
+
+    parsed_path = urlparse(raw).path or raw
+    if not (
+        parsed_path.startswith("/recordings/")
+        or parsed_path.startswith("/api/recordings/")
+    ):
+        return False
+
+    filename = Path(parsed_path).name
+    if not filename:
+        return False
+
+    target = (RECORDINGS_DIR / filename).resolve()
+    if not str(target).startswith(str(RECORDINGS_DIR)):
+        return False
+    if not target.exists() or not target.is_file():
+        return False
+
+    target.unlink()
+    return True
 
 
 @router.get("/")
@@ -130,5 +162,25 @@ def delete_order(order_id: int, user=Depends(require_auth)):
         db.delete(row)
         db.commit()
         return {"ok": True}
+    finally:
+        db.close()
+
+
+@router.delete("/{order_id}/recording")
+def delete_order_recording(order_id: int, user=Depends(require_auth)):
+    db = SessionLocal()
+    try:
+        row = db.get(models.Order, order_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if not _can_access_order(db, user, row):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        file_deleted = _delete_local_recording_file(row.recording_url)
+        row.recording_sid = None
+        row.recording_url = None
+        db.commit()
+
+        return {"ok": True, "file_deleted": file_deleted}
     finally:
         db.close()

@@ -35,7 +35,7 @@ class Order(Base):
     house_number = Column(String(50))
     ordered_items = Column(Text)
     payment_method = Column(String(50))
-    status = Column(String(50), default="completed")
+    status = Column(String(50), default="pending_admin_review")
     raw_json = Column(Text)
     recording_sid = Column(String(100), nullable=True)
     recording_url = Column(String(500), nullable=True)
@@ -68,3 +68,4 @@ class AuthToken(Base):
     created = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False)
+
