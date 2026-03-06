@@ -1264,6 +1264,7 @@ table.tbl {
     <div class="modal-actions">
       <button class="btn btn-secondary btn-sm" onclick="closeTranscriptModal()">Close</button>
     </div>
+
   </div>
 </div>
 
@@ -1528,13 +1529,13 @@ table.tbl {
   <div id="orders" class="page">
     <div class="page-head">
       <div class="page-title">Orders</div>
-      <div class="page-sub">Reservation data captured from voice calls</div>
+      <div class="page-sub">Reservations and food orders captured from voice calls</div>
     </div>
 
     <div class="card">
       <div class="card-head">
         <div class="card-icon">📦</div>
-        <div class="card-title">All Reservations</div>
+        <div class="card-title">Reservations</div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
@@ -1543,8 +1544,27 @@ table.tbl {
             <th>Date</th><th>Time</th><th>Guests</th><th>Phone</th>
             <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
           </tr></thead>
-          <tbody id="orderTable">
-            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No orders yet</div></div></td></tr>
+          <tbody id="reservationTable">
+            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No reservations yet</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head">
+        <div class="card-icon">🛒</div>
+        <div class="card-title">Food Orders</div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>Restaurant</th><th>Customer</th><th>Type</th>
+            <th>Delivery Type</th><th>Address</th><th>Items</th><th>Phone</th>
+            <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="foodOrderTable">
+            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No food orders yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1932,48 +1952,110 @@ function recUrl(url) {
   return s;
 }
 
+function parseJsonSafe(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw;
+  const text = String(raw).trim();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function formatDeliveryAddress(addr) {
+  if (!addr || typeof addr !== 'object') return '';
+  return [addr.city, addr.street, addr.house_number]
+    .map(v => String(v ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
+function summarizeOrderedItems(items) {
+  if (!Array.isArray(items) || !items.length) return '';
+  const parts = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const name = String(item.item_name ?? item.name ?? '').trim();
+    const qtyRaw = item.quantity ?? item.qty ?? 0;
+    const qty = Number.isFinite(Number(qtyRaw)) ? Number(qtyRaw) : 0;
+    if (!name || qty <= 0) continue;
+    parts.push(`${qty}x ${name}`);
+  }
+  return parts.join(' | ');
+}
+
+function getOrderViewMeta(order) {
+  const raw = parseJsonSafe(order.raw_json);
+  const rawCustomer = raw && typeof raw.customer === 'object' ? raw.customer : null;
+  const rawItems = raw && Array.isArray(raw.ordered_items) ? raw.ordered_items : null;
+  const isFoodOrder = !!(rawCustomer || rawItems || (raw && 'delivery_type' in raw));
+  return { raw, rawCustomer, rawItems, isFoodOrder };
+}
+
+function renderOrderRow(o) {
+  const { raw, rawCustomer, rawItems, isFoodOrder } = getOrderViewMeta(o);
+  const dateArrival = isFoodOrder
+    ? (String(raw?.delivery_type ?? '').trim() || '-')
+    : (o['date-arrival'] || o.date_arrival || o.address || '');
+  const timeArrival = isFoodOrder
+    ? (formatDeliveryAddress(raw?.delivery_address) || '-')
+    : (o.time_arrival || o['time-arrival'] || o.house_number || '');
+  const totalPeoples = isFoodOrder
+    ? (summarizeOrderedItems(rawItems) || o.ordered_items || '')
+    : (o.total_peoples ?? o.ordered_items ?? '');
+  const contact = isFoodOrder
+    ? (String(rawCustomer?.contact_number ?? '').trim() || o.caller || '')
+    : (o.contact_number || o.payment_method || '');
+  const statusNorm = normalizeOrderStatus(o.status);
+  const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
+  const statusCell = canQuickDone
+    ? `<button class="status-btn" onclick="quickCompleteOrder(${o.id})" title="Click to mark completed">${orderStatusBadge(statusNorm)}</button>`
+    : orderStatusBadge(statusNorm);
+  const rec = recUrl(o.recording_url);
+  const recCell = rec
+    ? `<audio controls preload="none" src="${esc(rec)}" style="width:170px;height:28px"></audio>`
+    : `<span style="color:var(--text3)">-</span>`;
+  return `<tr>
+    <td>${dim('#' + o.id)}</td>
+    <td style="font-weight:500">${esc(o.restaurant)}</td>
+    <td>${monospace(o.full_name)}</td>
+    <td><span class="badge badge-purple">${esc(o.order_type)}</span></td>
+    <td>${monospace(dateArrival)}</td>
+    <td>${monospace(timeArrival)}</td>
+    <td>${monospace(totalPeoples)}</td>
+    <td>${monospace(contact)}</td>
+    <td>${recCell}</td>
+    <td>${statusCell}</td>
+    <td>${dim(o.created)}</td>
+    <td>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderOrdersTable(tbody, rows, emptyText) {
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">${esc(emptyText)}</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(renderOrderRow).join('');
+}
 async function loadOrders() {
   try {
     const orders = await (await api(`${API_BASE}/orders/`)).json();
     oCache = Array.isArray(orders) ? orders : [];
-    const tbody = document.getElementById('orderTable');
-    if (!oCache.length) {
-      tbody.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No orders yet</div></div></td></tr>`;
-      return;
+    const reservationTable = document.getElementById('reservationTable');
+    const foodOrderTable = document.getElementById('foodOrderTable');
+    const reservations = [];
+    const foodOrders = [];
+    for (const o of oCache) {
+      const { isFoodOrder } = getOrderViewMeta(o);
+      if (isFoodOrder) foodOrders.push(o);
+      else reservations.push(o);
     }
-    tbody.innerHTML = oCache.map(o => {
-      const dateArrival  = o['date-arrival'] || o.date_arrival  || o.address        || '';
-      const timeArrival  = o.time_arrival   || o['time-arrival'] || o.house_number   || '';
-      const totalPeoples = o.total_peoples  ?? o.ordered_items  ?? '';
-      const contact      = o.contact_number || o.payment_method || '';
-      const statusNorm   = normalizeOrderStatus(o.status);
-      const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
-      const statusCell   = canQuickDone
-        ? `<button class="status-btn" onclick="quickCompleteOrder(${o.id})" title="Click to mark completed">${orderStatusBadge(statusNorm)}</button>`
-        : orderStatusBadge(statusNorm);
-      const rec          = recUrl(o.recording_url);
-      const recCell      = rec
-        ? `<audio controls preload="none" src="${esc(rec)}" style="width:170px;height:28px"></audio>`
-        : `<span style="color:var(--text3)">—</span>`;
-      return `<tr>
-        <td>${dim('#' + o.id)}</td>
-        <td style="font-weight:500">${esc(o.restaurant)}</td>
-        <td>${monospace(o.full_name)}</td>
-        <td><span class="badge badge-purple">${esc(o.order_type)}</span></td>
-        <td>${monospace(dateArrival)}</td>
-        <td>${monospace(timeArrival)}</td>
-        <td>${monospace(totalPeoples)}</td>
-        <td>${monospace(contact)}</td>
-        <td>${recCell}</td>
-        <td>${statusCell}</td>
-        <td>${dim(o.created)}</td>
-        <td>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
+    renderOrdersTable(reservationTable, reservations, 'No reservations yet');
+    renderOrdersTable(foodOrderTable, foodOrders, 'No food orders yet');
   } catch {}
 }
 
@@ -2017,16 +2099,28 @@ function openOrderModal(id) {
   const o = oCache.find(x => Number(x.id) === Number(id));
   if (!o) { toast('Order not found', 'err'); return; }
 
+  const { raw, rawCustomer, rawItems, isFoodOrder } = getOrderViewMeta(o);
+
   editOrderId = o.id;
   document.getElementById('orderMetaId').textContent = `#${o.id}`;
   document.getElementById('orderMetaRestaurant').textContent = o.restaurant || '-';
   document.getElementById('orderMetaCreated').textContent = o.created || '-';
-  document.getElementById('orderEditName').value = o.full_name ?? '';
+  document.getElementById('orderEditName').value = isFoodOrder
+    ? (String(rawCustomer?.full_name ?? '').trim() || o.full_name || '')
+    : (o.full_name ?? '');
   document.getElementById('orderEditType').value = o.order_type ?? '';
-  document.getElementById('orderEditDate').value = o['date-arrival'] || o.date_arrival || o.address || '';
-  document.getElementById('orderEditTime').value = o.time_arrival || o['time-arrival'] || o.house_number || '';
-  document.getElementById('orderEditGuests').value = o.total_peoples ?? o.ordered_items ?? '';
-  document.getElementById('orderEditPhone').value = o.contact_number || o.payment_method || '';
+  document.getElementById('orderEditDate').value = isFoodOrder
+    ? (String(raw?.delivery_type ?? '').trim() || '')
+    : (o['date-arrival'] || o.date_arrival || o.address || '');
+  document.getElementById('orderEditTime').value = isFoodOrder
+    ? (formatDeliveryAddress(raw?.delivery_address) || '')
+    : (o.time_arrival || o['time-arrival'] || o.house_number || '');
+  document.getElementById('orderEditGuests').value = isFoodOrder
+    ? (summarizeOrderedItems(rawItems) || '')
+    : (o.total_peoples ?? o.ordered_items ?? '');
+  document.getElementById('orderEditPhone').value = isFoodOrder
+    ? (String(rawCustomer?.contact_number ?? '').trim() || o.caller || '')
+    : (o.contact_number || o.payment_method || '');
   document.getElementById('orderEditStatus').value = normalizeOrderStatus(o.status);
   document.getElementById('orderEditErr').textContent = '';
   setOrderRecordingBox(o);
@@ -2140,6 +2234,57 @@ function cleanField(v) {
 }
 
 function normalizeOC(data) {
+  const customer = data && typeof data.customer === 'object' ? data.customer : {};
+  const hasFoodOrderShape =
+    !!customer &&
+    (Object.keys(customer).length > 0
+      || Array.isArray(pickFirst(data, 'ordered_items', 'items', 'order_items'))
+      || pickFirst(data, 'payment_method', 'delivery_type', 'delivery_address') != null);
+
+  if (hasFoodOrderShape) {
+    const fn = cleanField(pickFirst(customer,'full_name','fullName','name') ?? pickFirst(data,'full_name','fullName','name','customer_name'));
+    const cn = cleanField(pickFirst(customer,'contact_number','contactNumber','phone','phone_number') ?? pickFirst(data,'contact_number','contactNumber','phone','phone_number'));
+    const pm = cleanField(pickFirst(data,'payment_method','paymentMethod','payment'));
+    const dt = cleanField(pickFirst(data,'delivery_type','deliveryType','service_type'));
+
+    const addrSrc = pickFirst(data,'delivery_address','deliveryAddress','address');
+    const addrObj = (addrSrc && typeof addrSrc === 'object') ? addrSrc : {};
+    const deliveryAddress = {
+      city: cleanField(pickFirst(addrObj,'city','town')) || null,
+      street: cleanField(pickFirst(addrObj,'street','address_line','line1','address')) || null,
+      house_number: cleanField(pickFirst(addrObj,'house_number','houseNumber','building','flat','unit')) || null
+    };
+
+    const rawItems = pickFirst(data,'ordered_items','items','order_items');
+    const orderedItems = Array.isArray(rawItems) ? rawItems.map(it => {
+      if (!it || typeof it !== 'object') return null;
+      const itemName = cleanField(pickFirst(it,'item_name','itemName','name','title'));
+      const qRaw = pickFirst(it,'quantity','qty','count');
+      const qDigits = cleanField(qRaw).replace(/\D/g,'');
+      const quantity = qDigits ? Number(qDigits) : (Number.isInteger(qRaw) ? qRaw : 0);
+      if (!itemName || !quantity) return null;
+      return { item_name:itemName, quantity };
+    }).filter(Boolean) : [];
+
+    const missing = [];
+    if (!fn) missing.push('customer.full_name');
+    if (!cn) missing.push('customer.contact_number');
+    if (!pm) missing.push('payment_method');
+    if (!orderedItems.length) missing.push('ordered_items');
+
+    return {
+      data: {
+        order_type: cleanField(pickFirst(data,'order_type','orderType','type')) || 'order',
+        customer: { full_name: fn, contact_number: cn },
+        delivery_type: dt || null,
+        delivery_address: deliveryAddress,
+        ordered_items: orderedItems,
+        payment_method: pm
+      },
+      missing
+    };
+  }
+
   const fn = cleanField(pickFirst(data,'full_name','fullName','name','customer_name'));
   const da = cleanField(pickFirst(data,'date-arrival','date_arrival','arrival_date','dateArrival'));
   const ta = cleanField(pickFirst(data,'time_arrival','arrival_time','timeArrival','time'));
@@ -2765,3 +2910,4 @@ checkAuth().then(ok => { if (ok) boot(); });
 </script>
 </body>
 </html>
+

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,11 +36,30 @@ def _serialize_order(o: models.Order) -> dict:
         "house_number": o.house_number,
         "ordered_items": o.ordered_items,
         "payment_method": o.payment_method,
+        "raw_json": o.raw_json,
         "status": o.status,
         "recording_sid": o.recording_sid,
         "recording_url": o.recording_url,
         "created": o.created.isoformat() if o.created else None,
     }
+
+
+def _parse_raw_json(raw: str | None) -> dict:
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _is_food_order_row(order: models.Order) -> bool:
+    raw = _parse_raw_json(order.raw_json)
+    return any(
+        key in raw for key in ("customer", "ordered_items", "delivery_type", "delivery_address", "payment_method")
+    )
 
 
 def _can_access_order(db, user, order: models.Order) -> bool:
@@ -117,28 +137,32 @@ def update_order(order_id: int, payload: OrderUpdatePayload, user=Depends(requir
         if not _can_access_order(db, user, row):
             raise HTTPException(status_code=403, detail="Forbidden")
 
+        is_food = _is_food_order_row(row)
         updated = False
+
         if payload.full_name is not None:
             row.full_name = str(payload.full_name).strip()
             updated = True
         if payload.order_type is not None:
             row.order_type = str(payload.order_type).strip()
             updated = True
-        if payload.date_arrival is not None:
-            row.address = str(payload.date_arrival).strip()
-            updated = True
-        if payload.time_arrival is not None:
-            row.house_number = str(payload.time_arrival).strip()
-            updated = True
-        if payload.total_peoples is not None:
-            row.ordered_items = str(payload.total_peoples).strip()
-            updated = True
-        if payload.contact_number is not None:
-            row.payment_method = str(payload.contact_number).strip()
-            updated = True
         if payload.status is not None:
             row.status = str(payload.status).strip()
             updated = True
+
+        if not is_food:
+            if payload.date_arrival is not None:
+                row.address = str(payload.date_arrival).strip()
+                updated = True
+            if payload.time_arrival is not None:
+                row.house_number = str(payload.time_arrival).strip()
+                updated = True
+            if payload.total_peoples is not None:
+                row.ordered_items = str(payload.total_peoples).strip()
+                updated = True
+            if payload.contact_number is not None:
+                row.payment_method = str(payload.contact_number).strip()
+                updated = True
 
         if not updated:
             raise HTTPException(status_code=400, detail="Nothing to update")

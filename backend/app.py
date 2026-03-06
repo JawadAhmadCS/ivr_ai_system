@@ -267,38 +267,72 @@ def save_order(
 ):
     db = SessionLocal()
     try:
-        db.add(models.Order(
-            restaurant_id=restaurant_id,
-            restaurant=restaurant_name,
-            caller=caller,
-            call_sid=call_sid,
-            order_type="reservation",
-            full_name=normalized["full_name"],
-            address=normalized["date-arrival"],
-            house_number=normalized["time_arrival"],
-            ordered_items=str(normalized["total_peoples"]),
-            payment_method=normalized["contact_number"],
-            status="pending_admin_review",
-            raw_json=raw_json,
-            recording_sid=recording_sid,
-            recording_url=recording_url,
-        ))
+        kind = str(normalized.get("_kind") or "reservation").strip().lower()
+        if kind == "food_order":
+            delivery_address = normalized.get("delivery_address")
+            if not isinstance(delivery_address, dict):
+                delivery_address = {"city": "", "street": "", "house_number": ""}
+            ordered_items = normalized.get("ordered_items")
+            if not isinstance(ordered_items, list):
+                ordered_items = []
+            db.add(models.Order(
+                restaurant_id=restaurant_id,
+                restaurant=restaurant_name,
+                caller=caller,
+                call_sid=call_sid,
+                order_type=str(normalized.get("order_type") or "order").strip() or "order",
+                full_name=str(normalized.get("full_name") or "").strip(),
+                address=json.dumps(delivery_address, ensure_ascii=False),
+                house_number=str(normalized.get("delivery_type") or "").strip(),
+                ordered_items=json.dumps(ordered_items, ensure_ascii=False),
+                payment_method=str(normalized.get("payment_method") or "").strip(),
+                status="pending_admin_review",
+                raw_json=raw_json,
+                recording_sid=recording_sid,
+                recording_url=recording_url,
+            ))
+        else:
+            db.add(models.Order(
+                restaurant_id=restaurant_id,
+                restaurant=restaurant_name,
+                caller=caller,
+                call_sid=call_sid,
+                order_type=str(normalized.get("order_type") or "reservation").strip() or "reservation",
+                full_name=normalized["full_name"],
+                address=normalized["date-arrival"],
+                house_number=normalized["time_arrival"],
+                ordered_items=str(normalized["total_peoples"]),
+                payment_method=normalized["contact_number"],
+                status="pending_admin_review",
+                raw_json=raw_json,
+                recording_sid=recording_sid,
+                recording_url=recording_url,
+            ))
         db.commit()
-        logger.info(
-            "[ORDER] ✅ SAVED  name=%r  date=%r  time=%r  people=%s  phone=%r  restaurant=%s  sid=%s",
-            normalized["full_name"], normalized["date-arrival"], normalized["time_arrival"],
-            normalized["total_peoples"], normalized["contact_number"],
-            restaurant_name, call_sid or "n/a",
-        )
+        if kind == "food_order":
+            logger.info(
+                "[ORDER] SAVED (food_order) name=%r items=%s payment=%r restaurant=%s sid=%s",
+                normalized.get("full_name"),
+                len(normalized.get("ordered_items") or []),
+                normalized.get("payment_method"),
+                restaurant_name,
+                call_sid or "n/a",
+            )
+        else:
+            logger.info(
+                "[ORDER] SAVED (reservation) name=%r date=%r time=%r people=%s phone=%r restaurant=%s sid=%s",
+                normalized["full_name"], normalized["date-arrival"], normalized["time_arrival"],
+                normalized["total_peoples"], normalized["contact_number"],
+                restaurant_name, call_sid or "n/a",
+            )
     except Exception:
-        logger.exception("[ORDER] ❌ DB save FAILED")
+        logger.exception("[ORDER] DB save FAILED")
         db.rollback()
         raise
     finally:
         db.close()
 
 
-# ── OpenAI helpers ─────────────────────────────────────────────────────────────
 def _usage_int(value) -> int:
     try:
         return max(0, int(value or 0))
@@ -594,29 +628,71 @@ def _pick(d: dict, *keys):
     return None
 
 
-def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
-    if not isinstance(data, dict):
-        return {}, ["full_name", "date-arrival", "time_arrival", "total_peoples", "contact_number"]
+def _parse_positive_int(value) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value if value > 0 else 0
+    if isinstance(value, float):
+        iv = int(value)
+        return iv if iv > 0 else 0
+    text = _clean(value)
+    if not text:
+        return 0
+    digits = "".join(c for c in text if c.isdigit())
+    if not digits:
+        return 0
+    try:
+        iv = int(digits)
+    except ValueError:
+        return 0
+    return iv if iv > 0 else 0
 
-    full_name      = _clean(_pick(data, "full_name", "fullName", "name", "customer_name"))
-    date_arrival   = _clean(_pick(data, "date-arrival", "date_arrival", "arrival_date"))
-    time_arrival   = _clean(_pick(data, "time_arrival", "arrival_time", "timeArrival", "time"))
+
+def _normalize_ordered_items(items) -> list[dict]:
+    out: list[dict] = []
+    if not isinstance(items, list):
+        return out
+    for item in items:
+        if isinstance(item, dict):
+            name = _clean(_pick(item, "item_name", "itemName", "name", "title"))
+            qty = _parse_positive_int(_pick(item, "quantity", "qty", "count"))
+        else:
+            name = _clean(item)
+            qty = 1 if name else 0
+        if not name or qty <= 0:
+            continue
+        out.append({"item_name": name, "quantity": qty})
+    return out
+
+
+def _normalize_delivery_address(value) -> dict:
+    if isinstance(value, dict):
+        return {
+            "city": _clean(_pick(value, "city", "town")),
+            "street": _clean(_pick(value, "street", "address_line", "line1", "address")),
+            "house_number": _clean(_pick(value, "house_number", "houseNumber", "building", "flat", "unit")),
+        }
+    text = _clean(value)
+    return {
+        "city": "",
+        "street": text,
+        "house_number": "",
+    }
+
+
+def _normalize_reservation_payload(data: dict) -> tuple[dict, list[str]]:
+    full_name = _clean(_pick(data, "full_name", "fullName", "name", "customer_name"))
+    date_arrival = _clean(_pick(data, "date-arrival", "date_arrival", "arrival_date"))
+    time_arrival = _clean(_pick(data, "time_arrival", "arrival_time", "timeArrival", "time"))
     contact_number = _clean(_pick(data, "contact_number", "contactNumber", "phone", "phone_number"))
-
-    raw_total     = _pick(data, "total_peoples", "total_people", "people", "party_size")
-    total_peoples = 0
-    if isinstance(raw_total, int):
-        total_peoples = raw_total
-    elif raw_total is not None:
-        digits = "".join(c for c in str(raw_total) if c.isdigit())
-        if digits:
-            total_peoples = int(digits)
+    total_peoples = _parse_positive_int(_pick(data, "total_peoples", "total_people", "people", "party_size"))
 
     missing = []
     for fname, fval in [
-        ("full_name",      full_name),
-        ("date-arrival",   date_arrival),
-        ("time_arrival",   time_arrival),
+        ("full_name", full_name),
+        ("date-arrival", date_arrival),
+        ("time_arrival", time_arrival),
         ("contact_number", contact_number),
     ]:
         if not fval:
@@ -625,13 +701,111 @@ def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
         missing.append("total_peoples")
 
     return {
-        "order_type":     "reservation",
-        "full_name":      full_name,
-        "date-arrival":   date_arrival,
-        "time_arrival":   time_arrival,
-        "total_peoples":  total_peoples,
+        "_kind": "reservation",
+        "order_type": "reservation",
+        "full_name": full_name,
+        "date-arrival": date_arrival,
+        "time_arrival": time_arrival,
+        "total_peoples": total_peoples,
         "contact_number": contact_number,
     }, missing
+
+
+def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
+    customer = data.get("customer")
+    customer = customer if isinstance(customer, dict) else {}
+
+    full_name = _clean(_pick(customer, "full_name", "fullName", "name"))
+    if not full_name:
+        full_name = _clean(_pick(data, "full_name", "fullName", "name", "customer_name"))
+
+    contact_number = _clean(_pick(customer, "contact_number", "contactNumber", "phone", "phone_number"))
+    if not contact_number:
+        contact_number = _clean(_pick(data, "contact_number", "contactNumber", "phone", "phone_number"))
+
+    order_type = _clean(_pick(data, "order_type", "orderType", "type")) or "order"
+    payment_method = _clean(_pick(data, "payment_method", "paymentMethod", "payment"))
+    delivery_type = _clean(_pick(data, "delivery_type", "deliveryType", "service_type"))
+    delivery_type = delivery_type or None
+
+    delivery_address = _normalize_delivery_address(
+        _pick(data, "delivery_address", "deliveryAddress", "address")
+    )
+    ordered_items = _normalize_ordered_items(_pick(data, "ordered_items", "items", "order_items"))
+
+    missing = []
+    if not full_name:
+        missing.append("customer.full_name")
+    if not contact_number:
+        missing.append("customer.contact_number")
+    if not payment_method:
+        missing.append("payment_method")
+    if not ordered_items:
+        missing.append("ordered_items")
+
+    return {
+        "_kind": "food_order",
+        "order_type": order_type,
+        "full_name": full_name,
+        "contact_number": contact_number,
+        "payment_method": payment_method,
+        "delivery_type": delivery_type,
+        "delivery_address": delivery_address,
+        "ordered_items": ordered_items,
+    }, missing
+
+
+def normalize_order_payload(data: dict) -> tuple[dict, list[str]]:
+    if not isinstance(data, dict):
+        return {}, ["invalid_payload"]
+
+    is_food_order_shape = any(
+        key in data for key in ("customer", "ordered_items", "delivery_type", "delivery_address", "payment_method")
+    )
+    if is_food_order_shape:
+        return _normalize_food_order_payload(data)
+    return _normalize_reservation_payload(data)
+
+
+def normalize_reservation(data: dict) -> tuple[dict, list[str]]:
+    # Backward-compatible wrapper used by older call sites.
+    return normalize_order_payload(data)
+
+
+def build_order_json_payload(normalized: dict) -> dict:
+    kind = str(normalized.get("_kind") or "reservation").strip().lower()
+    if kind == "food_order":
+        addr = normalized.get("delivery_address")
+        if isinstance(addr, dict):
+            addr = {
+                "city": (str(addr.get("city") or "").strip() or None),
+                "street": (str(addr.get("street") or "").strip() or None),
+                "house_number": (str(addr.get("house_number") or "").strip() or None),
+            }
+        else:
+            addr = {"city": None, "street": None, "house_number": None}
+        return {
+            "order_type": str(normalized.get("order_type") or "order"),
+            "customer": {
+                "full_name": str(normalized.get("full_name") or ""),
+                "contact_number": str(normalized.get("contact_number") or ""),
+            },
+            "delivery_type": normalized.get("delivery_type"),
+            "delivery_address": addr,
+            "ordered_items": normalized.get("ordered_items")
+            if isinstance(normalized.get("ordered_items"), list)
+            else [],
+            "payment_method": str(normalized.get("payment_method") or ""),
+        }
+
+    return {
+        "order_type": "reservation",
+        "full_name": str(normalized.get("full_name") or ""),
+        "date-arrival": str(normalized.get("date-arrival") or ""),
+        "time_arrival": str(normalized.get("time_arrival") or ""),
+        "total_peoples": int(normalized.get("total_peoples") or 0),
+        "contact_number": str(normalized.get("contact_number") or ""),
+    }
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -698,15 +872,21 @@ async def extract_order_post_call(
         return None
 
     extractor_prompt = """\
-You extract one reservation object from a call transcript.
-Return ONLY one line in exactly this format:
-ORDER_JSON: {"full_name":"...","date-arrival":"YYYY-MM-DD","time_arrival":"HH:MM","total_peoples":0,"contact_number":"..."}
+You extract one finalized booking object from a restaurant call transcript.
+Return ONLY one line starting with ORDER_JSON: and a valid JSON object.
+
+Choose exactly one schema:
+1) Reservation schema:
+ORDER_JSON: {"order_type":"reservation","full_name":"...","date-arrival":"YYYY-MM-DD","time_arrival":"HH:MM","total_peoples":0,"contact_number":"..."}
+
+2) Food order schema:
+ORDER_JSON: {"order_type":"type","customer":{"full_name":"...","contact_number":"..."},"delivery_type":"...","delivery_address":{"city":"...","street":"...","house_number":"..."},"ordered_items":[{"item_name":"...","quantity":"..."}],"payment_method":"..."}
+
 Rules:
-- No explanation
-- No markdown
-- Use exactly these keys
-- total_peoples must be a number
-- If a value is unknown, use empty string for text fields and 0 for total_peoples"""
+- No explanation, no markdown
+- Use only one schema based on conversation intent
+- quantity and total_peoples must be numbers
+- If unknown: use empty strings for required text, null for optional delivery fields, and [] for ordered_items"""
 
     try:
         async with httpx.AsyncClient(timeout=POST_CALL_EXTRACT_TIMEOUT) as client:
@@ -1062,20 +1242,19 @@ async def ingest_order(data: dict, user=Depends(require_auth)):
     except (TypeError, ValueError):
         restaurant_id = None
 
-    normalized, missing = normalize_reservation(data)
+    normalized, missing = normalize_order_payload(data)
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing: {', '.join(missing)}")
 
     raw_json = data.get("raw_json") or json.dumps(
-        {k: normalized[k] for k in (
-            "full_name", "date-arrival", "time_arrival", "total_peoples", "contact_number"
-        )}
+        build_order_json_payload(normalized),
+        ensure_ascii=False,
     )
     try:
         save_order(
             restaurant_id,
             get_restaurant_name(restaurant_id),
-            str(data.get("caller") or "web"),
+            str(data.get("caller") or normalized.get("contact_number") or "web"),
             str(data.get("call_sid") or ""),
             normalized,
             raw_json,
@@ -1240,17 +1419,11 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 nonlocal order_saved
                 if order_saved:
                     return True
-                normalized, missing = normalize_reservation(payload)
+                normalized, missing = normalize_order_payload(payload)
                 if missing:
                     logger.warning("[ORDER] Missing fields from %s: %s", source, missing)
                     return False
-                raw_json = json.dumps({
-                    "full_name":      normalized["full_name"],
-                    "date-arrival":   normalized["date-arrival"],
-                    "time_arrival":   normalized["time_arrival"],
-                    "total_peoples":  normalized["total_peoples"],
-                    "contact_number": normalized["contact_number"],
-                })
+                raw_json = json.dumps(build_order_json_payload(normalized), ensure_ascii=False)
                 try:
                     save_order(
                         restaurant_id, restaurant_name,
@@ -1528,4 +1701,5 @@ def media_stream_http_guard(restaurant_id: int | None = None):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)
+
 
