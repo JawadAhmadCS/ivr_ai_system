@@ -1475,6 +1475,10 @@ table.tbl {
             </div>
             <textarea id="rprompt" placeholder="Custom instructions for this location..."></textarea>
           </div>
+          <div class="form-group">
+            <label class="form-label">Pre-call Notice</label>
+            <textarea id="rnotice" placeholder="Optional opening message before AI starts (e.g., call recording notice)."></textarea>
+          </div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="addRestaurant()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -2306,9 +2310,14 @@ async function addRestaurant() {
     await api(`${API_BASE}/restaurants/add`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ name, phone:document.getElementById('rphone').value.trim(), ivr_text:document.getElementById('rprompt').value })
+      body:JSON.stringify({
+        name,
+        phone:document.getElementById('rphone').value.trim(),
+        ivr_text:document.getElementById('rprompt').value,
+        precall_notice_text:document.getElementById('rnotice').value
+      })
     });
-    ['rname','rphone','rprompt'].forEach(id => document.getElementById(id).value = '');
+    ['rname','rphone','rprompt','rnotice'].forEach(id => document.getElementById(id).value = '');
     toast(`"${name}" added ✓`);
     loadRestaurants();
   } catch { toast('Failed to add', 'err'); }
@@ -2327,7 +2336,8 @@ async function updateR(id) {
       body:JSON.stringify({
         name:   document.getElementById(`rn-${id}`).value.trim(),
         phone:  document.getElementById(`rp-${id}`).value.trim(),
-        ivr_text: document.getElementById(`rpr-${id}`).value
+        ivr_text: document.getElementById(`rpr-${id}`).value,
+        precall_notice_text: document.getElementById(`rnt-${id}`).value
       })
     });
     toast('Saved ✓');
@@ -2642,6 +2652,10 @@ function openR(id, silent) {
           <button type="button" class="prompt-tag" data-opt-target="rpr-${r.id}" onclick="optimizePromptField('rpr-${r.id}', this)">Optimize</button>
         </div>
         <textarea id="rpr-${r.id}">${esc(r.ivr_text||'')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Pre-call Notice</label>
+        <textarea id="rnt-${r.id}" placeholder="Optional opening message before AI starts">${esc(r.precall_notice_text||'')}</textarea>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="updateR(${r.id})">

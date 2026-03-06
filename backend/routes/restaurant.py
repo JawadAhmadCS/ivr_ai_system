@@ -12,11 +12,13 @@ class RestaurantCreate(BaseModel):
     name: str
     phone: Optional[str] = None
     ivr_text: Optional[str] = None
+    precall_notice_text: Optional[str] = None
 
 class RestaurantUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     ivr_text: Optional[str] = None
+    precall_notice_text: Optional[str] = None
     active: Optional[bool] = None
 
 def serialize_restaurant(r: models.Restaurant):
@@ -26,6 +28,7 @@ def serialize_restaurant(r: models.Restaurant):
         "phone": r.phone,
         "active": r.active,
         "ivr_text": r.ivr_text,
+        "precall_notice_text": r.precall_notice_text,
     }
 
 @router.post("/add")
@@ -35,7 +38,8 @@ def add_restaurant(payload: RestaurantCreate, _user=Depends(require_admin)):
         r = models.Restaurant(
             name=payload.name.strip(),
             phone=(payload.phone or "").strip(),
-            ivr_text=(payload.ivr_text or "").strip()
+            ivr_text=(payload.ivr_text or "").strip(),
+            precall_notice_text=(payload.precall_notice_text or "").strip(),
         )
         db.add(r)
         db.commit()
@@ -86,6 +90,8 @@ def update_restaurant(id: int, payload: RestaurantUpdate, user=Depends(require_a
             r.phone = payload.phone.strip()
         if payload.ivr_text is not None:
             r.ivr_text = payload.ivr_text
+        if payload.precall_notice_text is not None:
+            r.precall_notice_text = payload.precall_notice_text
         if payload.active is not None:
             if not user.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")

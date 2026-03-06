@@ -241,6 +241,20 @@ def restaurant_exists_and_active(rid: int) -> bool:
         db.close()
 
 
+def get_precall_notice_text(restaurant_id: int | None) -> str:
+    if restaurant_id is None:
+        return PRECALL_NOTICE_TEXT
+    db = SessionLocal()
+    try:
+        r = db.get(models.Restaurant, restaurant_id)
+        if not r:
+            return PRECALL_NOTICE_TEXT
+        custom_text = (r.precall_notice_text or "").strip()
+        return custom_text or PRECALL_NOTICE_TEXT
+    finally:
+        db.close()
+
+
 def save_order(
     restaurant_id,
     restaurant_name,
@@ -951,10 +965,11 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
         return HTMLResponse(content=str(response), media_type="application/xml")
 
     if PLAY_PRECALL_NOTICE:
+        notice_text = get_precall_notice_text(restaurant_id)
         if PRECALL_NOTICE_AUDIO_URL:
             response.play(PRECALL_NOTICE_AUDIO_URL)
-        elif PRECALL_NOTICE_TEXT:
-            response.say(PRECALL_NOTICE_TEXT, voice="alice")
+        elif notice_text:
+            response.say(notice_text, voice="alice")
 
     # ── Build WebSocket URL ──────────────────────────────────────────────────
     host      = request.headers.get("host", "localhost")

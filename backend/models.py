@@ -10,6 +10,7 @@ class Restaurant(Base):
     phone = Column(String(50))
     active = Column(Boolean, default=True)
     ivr_text = Column(Text)
+    precall_notice_text = Column(Text)
 
 class CallLog(Base):
     __tablename__ = "call_logs"

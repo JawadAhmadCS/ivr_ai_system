@@ -51,3 +51,8 @@ def ensure_schema():
                 conn.execute(text("ALTER TABLE orders ADD COLUMN recording_url VARCHAR(500) NULL"))
         except Exception:
             pass
+        try:
+            if not _column_exists(conn, "restaurants", "precall_notice_text"):
+                conn.execute(text("ALTER TABLE restaurants ADD COLUMN precall_notice_text TEXT NULL"))
+        except Exception:
+            pass
