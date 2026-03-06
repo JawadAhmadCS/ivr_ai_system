@@ -2911,7 +2911,7 @@ function openR(id, silent) {
           ${renderOpeningAudioBoxHtml(r)}
         </div>
         <div class="btn-row" style="margin-top:10px;align-items:center;gap:8px;flex-wrap:wrap">
-          <input id="r-audio-file-${r.id}" type="file" accept="audio/*" style="max-width:280px">
+          <input id="r-audio-file-${r.id}" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" style="max-width:280px">
           <button class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">Upload Audio</button>
           <button class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">Remove Audio</button>
         </div>

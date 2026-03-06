@@ -7,7 +7,7 @@ import mimetypes
 import websockets
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import quote_plus, parse_qsl
+from urllib.parse import quote_plus, parse_qsl, urlparse
 
 import httpx
 import requests
@@ -62,7 +62,7 @@ PLAY_PRECALL_NOTICE               = _env_bool("PLAY_PRECALL_NOTICE", True)
 PRECALL_NOTICE_AUDIO_URL          = (os.getenv("PRECALL_NOTICE_AUDIO_URL") or "").strip()
 PRECALL_NOTICE_TEXT               = (
     os.getenv("PRECALL_NOTICE_TEXT")
-    or "Your call may be recorded for quality and training purposes."
+    or ""
 ).strip()
 
 TWILIO_ACCOUNT_SID        = os.getenv("TWILIO_ACCOUNT_SID")
@@ -244,30 +244,63 @@ def restaurant_exists_and_active(rid: int) -> bool:
 
 def get_precall_notice_text(restaurant_id: int | None) -> str:
     if restaurant_id is None:
-        return PRECALL_NOTICE_TEXT
+        return ""
     db = SessionLocal()
     try:
         r = db.get(models.Restaurant, restaurant_id)
         if not r:
-            return PRECALL_NOTICE_TEXT
+            return ""
         custom_text = (r.precall_notice_text or "").strip()
-        return custom_text or PRECALL_NOTICE_TEXT
+        return custom_text
     finally:
         db.close()
 
 
 def get_precall_notice_audio_url(restaurant_id: int | None) -> str:
     if restaurant_id is None:
-        return PRECALL_NOTICE_AUDIO_URL
+        return ""
     db = SessionLocal()
     try:
         r = db.get(models.Restaurant, restaurant_id)
         if not r:
-            return PRECALL_NOTICE_AUDIO_URL
+            return ""
         custom_url = (r.precall_notice_audio_url or "").strip()
-        return custom_url or PRECALL_NOTICE_AUDIO_URL
+        return custom_url
     finally:
         db.close()
+
+
+def is_twilio_playable_audio_url(url: str | None) -> bool:
+    raw = str(url or "").strip()
+    if not raw:
+        return False
+    path = urlparse(raw).path or raw
+    ext = Path(path).suffix.lower()
+    # Keep this conservative to avoid Twilio <Play> media errors.
+    return ext in {".wav", ".mp3", ".ulaw", ".gsm", ".aif", ".aiff"}
+
+
+def to_public_media_url(request: Request, url: str | None) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    if raw.lower().startswith(("http://", "https://")):
+        return raw
+
+    host = (request.headers.get("host") or "").strip()
+    if not host:
+        return raw
+
+    xf_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    scheme = xf_proto or request.url.scheme or "https"
+    if scheme not in {"http", "https"}:
+        scheme = "https"
+    if scheme == "http":
+        scheme = "https"
+
+    if raw.startswith("/"):
+        return f"{scheme}://{host}{raw}"
+    return f"{scheme}://{host}/{raw.lstrip('/')}"
 
 
 def save_order(
@@ -1162,11 +1195,19 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
     if PLAY_PRECALL_NOTICE:
         notice_text = get_precall_notice_text(restaurant_id)
-        notice_audio_url = get_precall_notice_audio_url(restaurant_id)
-        if notice_audio_url:
+        notice_audio_url = to_public_media_url(
+            request,
+            get_precall_notice_audio_url(restaurant_id),
+        )
+        if notice_audio_url and is_twilio_playable_audio_url(notice_audio_url):
             response.play(notice_audio_url)
         elif notice_text:
             response.say(notice_text, voice="alice")
+        elif notice_audio_url:
+            logger.warning(
+                "[PRECALL] Unsupported opening audio format for Twilio <Play>: %s",
+                notice_audio_url,
+            )
 
     # ── Build WebSocket URL ──────────────────────────────────────────────────
     host      = request.headers.get("host", "localhost")

@@ -13,7 +13,7 @@ from auth import require_auth, require_admin
 router = APIRouter(prefix="/restaurants")
 RECORDINGS_DIR = (Path(__file__).resolve().parent.parent / "recordings").resolve()
 MAX_OPENING_AUDIO_BYTES = 10 * 1024 * 1024
-ALLOWED_OPENING_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg"}
+ALLOWED_OPENING_AUDIO_EXTENSIONS = {".wav", ".mp3"}
 
 class RestaurantCreate(BaseModel):
     name: str
@@ -169,7 +169,7 @@ async def upload_opening_audio(
         if ext not in ALLOWED_OPENING_AUDIO_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
-                detail="Unsupported audio format. Allowed: wav, mp3, m4a, ogg",
+                detail="Unsupported audio format. Allowed: wav, mp3",
             )
 
         payload = await file.read(MAX_OPENING_AUDIO_BYTES + 1)

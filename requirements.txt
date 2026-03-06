@@ -9,4 +9,3 @@ websockets
 httpx
 passlib
 python-multipart
-python-multipart
