@@ -68,11 +68,22 @@ class GlobalPrompt(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     restaurant_id = Column(Integer, index=True, nullable=True)
     active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    created = Column(DateTime, default=datetime.utcnow)
+
+
+class RecoveryKey(Base):
+    __tablename__ = "recovery_keys"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    key_value = Column(String(120), unique=True, index=True, nullable=False)
+    is_used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
     created = Column(DateTime, default=datetime.utcnow)
 
 

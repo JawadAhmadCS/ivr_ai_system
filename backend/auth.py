@@ -29,17 +29,29 @@ def verify_password(password: str, password_hash: str) -> bool:
 def ensure_admin_user() -> None:
     if not ADMIN_EMAIL or not ADMIN_PASSWORD:
         return
+    admin_email = ADMIN_EMAIL.strip().lower()
     db = SessionLocal()
     try:
-        user = db.query(models.User).filter_by(email=ADMIN_EMAIL).first()
+        user = db.query(models.User).filter_by(email=admin_email).first()
         if not user:
             user = models.User(
-                email=ADMIN_EMAIL.strip().lower(),
+                email=admin_email,
                 password_hash=hash_password(ADMIN_PASSWORD),
                 active=True,
                 is_admin=True,
             )
             db.add(user)
+            db.commit()
+            return
+
+        changed = False
+        if not user.is_admin:
+            user.is_admin = True
+            changed = True
+        if not user.active:
+            user.active = True
+            changed = True
+        if changed:
             db.commit()
     finally:
         db.close()

@@ -30,6 +30,7 @@ Dashboard access ke liye admin login required hai. `.env` me ye set karein:
 ```
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=your-strong-password
+SUPERADMIN_RECOVERY_KEY=set-a-strong-random-key
 TOKEN_TTL_HOURS=24
 ```
 
@@ -51,6 +52,32 @@ TOKEN_TTL_HOURS=24
 ```
 
 Dashboard open karte hi login screen ayegi. Same creds se sign in karein.
+Backend startup/login path me `ADMIN_EMAIL` + `ADMIN_PASSWORD` se super admin account ensure hota hai (create/reactivate + admin role).
+
+### Forgot Password / Super Admin Recovery
+
+Sign-in card me `Forgot password?` option diya gaya hai. Isse super admin password reset karne ke liye:
+
+1. `ADMIN_EMAIL` wala email enter karein.
+2. `SUPERADMIN_RECOVERY_KEY` enter karein.
+3. Naya password set karein.
+
+Security note: recovery key sirf server `.env` me rakhein, frontend me expose na karein.
+
+### Owner Profile + One-Time Recovery Keys
+
+Owner (super admin) ko sidebar me `Profile` page milta hai jahan se:
+
+1. Apna name update kar sakta hai.
+2. Apna password change kar sakta hai.
+3. `Recovery Keys` manage kar sakta hai.
+
+Recovery keys behavior:
+
+1. Owner ke liye total 10 random keys maintain hoti hain.
+2. Har key one-time use hai (`/auth/recover-super-admin` par use hone ke baad dobara valid nahi hoti).
+3. Used keys UI me red + line-through style me show hoti hain (unusable state).
+4. Keys ko CSV me export kiya ja sakta hai.
 
 ## Frontend Server (VPS)
 

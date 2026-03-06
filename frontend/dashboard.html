@@ -253,6 +253,27 @@ body::before {
 
 .logout-btn:hover { border-color:var(--red); color:var(--red); background:var(--red-dim); }
 
+.profile-btn {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  padding:9px 12px;
+  background:transparent;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  color:var(--text2);
+  cursor:pointer;
+  font-family:'Outfit',sans-serif;
+  font-size:13px;
+  font-weight:500;
+  transition:all .15s;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.profile-btn:hover { border-color:var(--blue); color:#93c5fd; background:var(--blue-dim); }
+
 /* ── COLLAPSED ── */
 body.collapsed .sidebar { width:var(--sidebar-sm); }
 body.collapsed .main    { margin-left:var(--sidebar-sm); }
@@ -262,12 +283,14 @@ body.collapsed .nav-section,
 body.collapsed .nav-label,
 body.collapsed .nav-badge,
 body.collapsed .system-status span,
-body.collapsed .logout-btn span { display:none; }
+body.collapsed .logout-btn span,
+body.collapsed .profile-btn span { display:none; }
 body.collapsed .sidebar-toggle { margin-left:0; }
 body.collapsed .nav-btn  { justify-content:center; padding:10px 0; gap:0; }
 body.collapsed .nav-section { padding:10px 0; }
 body.collapsed .system-status { justify-content:center; padding:9px 0; }
 body.collapsed .logout-btn { justify-content:center; padding:9px 0; gap:0; }
+body.collapsed .profile-btn { justify-content:center; padding:9px 0; gap:0; }
 
 /* ── RTL LAYOUT ── */
 html[dir="rtl"] .sidebar {
@@ -951,6 +974,31 @@ table.tbl {
 .auth-sub   { font-size:13px; color:var(--text2); margin-bottom:20px; }
 .auth-err   { color:var(--red); font-size:12.5px; margin-top:8px; min-height:16px; }
 
+.auth-link-row { display:flex; justify-content:flex-end; margin-top:10px; }
+.auth-link {
+  border:none;
+  background:transparent;
+  color:var(--blue);
+  font-size:12px;
+  cursor:pointer;
+  text-decoration:underline;
+  padding:0;
+}
+.auth-link:hover { color:#93c5fd; }
+
+.auth-recovery {
+  display:none;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--border);
+}
+
+.auth-recovery-note {
+  color:var(--text3);
+  font-size:12px;
+  line-height:1.55;
+}
+
 /* ── EDIT USER MODAL ── */
 .modal-overlay {
   position:fixed;
@@ -1149,6 +1197,51 @@ table.tbl {
 
 .admin-user-btns { display:flex; gap:7px; flex-wrap:wrap; }
 
+/* ── PROFILE / RECOVERY ── */
+.recovery-key-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.recovery-key {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:10px 12px;
+}
+
+.recovery-key-code {
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  letter-spacing:.2px;
+}
+
+.recovery-key-status {
+  font-size:11px;
+  font-family:'JetBrains Mono',monospace;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+}
+
+.recovery-key.used {
+  border-color:rgba(239,68,68,.35);
+  background:rgba(239,68,68,.08);
+}
+
+.recovery-key.used .recovery-key-code {
+  color:var(--red);
+  text-decoration:line-through;
+}
+
+.recovery-key.used .recovery-key-status {
+  color:var(--red);
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
   .split { grid-template-columns:1fr; }
@@ -1191,6 +1284,23 @@ table.tbl {
     <button class="btn btn-primary" style="width:100%" onclick="login()">
       Sign in →
     </button>
+    <div class="auth-link-row">
+      <button class="auth-link" type="button" onclick="toggleRecovery()" data-i18n="Forgot password?">Forgot password?</button>
+    </div>
+    <div id="recoveryBox" class="auth-recovery">
+      <div class="form-group">
+        <label class="form-label" data-i18n="Recovery Key">Recovery Key</label>
+        <input id="fpRecoveryKey" type="password" placeholder="Enter recovery key">
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="New Password">New Password</label>
+        <input id="fpNewPassword" type="password" placeholder="At least 6 characters">
+      </div>
+      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="recoverSuperAdmin()" data-i18n="Reset Super Admin Password">Reset Super Admin Password</button>
+      <p class="auth-recovery-note" style="margin-top:8px" data-i18n="Use recovery key from server .env to reset access.">
+        Use recovery key from server .env to reset access.
+      </p>
+    </div>
     <div id="authErr" class="auth-err"></div>
   </div>
 </div>
@@ -1385,6 +1495,7 @@ table.tbl {
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
       <span class="nav-label" data-i18n="Call Logs">Call Logs</span>
     </button>
+
   </div>
 
   <div class="sidebar-footer">
@@ -1392,9 +1503,9 @@ table.tbl {
       <div class="pulse-dot"></div>
       <span data-i18n="System Online">System Online</span>
     </div>
-    <button class="logout-btn" onclick="logout()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      <span data-i18n="Logout">Logout</span>
+    <button class="profile-btn" id="profileQuickBtn" onclick="openProfileFromFooter()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+      <span id="profileQuickName">Profile</span>
     </button>
   </div>
 </nav>
@@ -1674,6 +1785,93 @@ table.tbl {
     </div>
   </div>
 
+  <!-- Profile -->
+  <div id="profile" class="page">
+    <div class="page-head">
+      <div class="page-title" data-i18n="Profile">Profile</div>
+      <div class="page-sub" data-i18n="Manage your account settings and security options">Manage your account settings and security options</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">👤</div>
+        <div class="card-title" data-i18n="Account Settings">Account Settings</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" data-i18n="Full Name">Full Name</label>
+          <input id="profileName" placeholder="Your full name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="Email">Email</label>
+          <input id="profileEmail" readonly>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="saveProfile()" data-i18n="Save Profile">Save Profile</button>
+        <button class="btn btn-danger btn-sm" onclick="logout()" data-i18n="Logout">Logout</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon">🔐</div>
+        <div class="card-title" data-i18n="Password Settings">Password Settings</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" data-i18n="Current Password">Current Password</label>
+          <input id="profileCurrentPassword" type="password" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="New Password">New Password</label>
+          <input id="profileNewPassword" type="password" placeholder="••••••••">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="Confirm New Password">Confirm New Password</label>
+        <input id="profileConfirmPassword" type="password" placeholder="••••••••">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="changeProfilePassword()" data-i18n="Change Password">Change Password</button>
+      </div>
+    </div>
+
+    <div id="ownerKeysCard" class="card" style="display:none">
+      <div class="card-head">
+        <div class="card-icon">🗝️</div>
+        <div class="card-title" data-i18n="Recovery Keys">Recovery Keys</div>
+        <div class="card-actions">
+          <button id="regenKeysBtn" class="btn btn-secondary btn-sm" style="display:none" onclick="regenerateRecoveryKeys()" data-i18n="Generate New 10 Keys">Generate New 10 Keys</button>
+          <button id="exportKeysBtn" class="btn btn-primary btn-sm" style="display:none" onclick="exportRecoveryKeys()" data-i18n="Export Keys">Export Keys</button>
+        </div>
+      </div>
+      <div id="recoveryUnlockBox">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px" data-i18n="Keys are hidden until you verify your password.">
+          Keys are hidden until you verify your password.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" data-i18n="Current Password">Current Password</label>
+            <input id="recoveryUnlockPassword" type="password" placeholder="••••••••">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="unlockRecoveryKeys()" data-i18n="View Keys">View Keys</button>
+          </div>
+        </div>
+      </div>
+      <div id="recoveryKeysBody" style="display:none">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px" data-i18n="Each key is one-time use. After use it becomes unusable.">
+          Each key is one-time use. After use it becomes unusable.
+        </p>
+        <div id="recoveryKeysInfo" style="font-size:12px;color:var(--text3);margin-bottom:10px"></div>
+        <div id="recoveryKeysList" class="recovery-key-list">
+          <div style="color:var(--text3);font-size:13px" data-i18n="No keys available">No keys available</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- Toast -->
@@ -1688,11 +1886,61 @@ const HE = {
   "Sign in":"התחבר",
   "Sign in to continue":"התחבר לחשבון שלך",
   "Sign in to your VoiceIQ account":"התחבר לחשבון VoiceIQ שלך",
+  "Forgot password?":"שכחת סיסמה?",
+  "Recovery Key":"מפתח שחזור",
+  "New Password":"סיסמה חדשה",
+  "Reset Super Admin Password":"איפוס סיסמת סופר אדמין",
+  "Use recovery key from server .env to reset access.":"השתמש במפתח השחזור מקובץ .env בשרת כדי לאפס גישה.",
+  "Enter recovery key":"הזן מפתח שחזור",
+  "At least 6 characters":"לפחות 6 תווים",
   "Email":"אימייל",
   "Password":"סיסמה",
   "Please fill in all fields":"נא למלא את כל השדות",
   "Invalid email or password":"אימייל או סיסמה שגויים",
+  "Recovery key is required":"נדרש מפתח שחזור",
+  "Invalid recovery key":"מפתח שחזור שגוי",
+  "Recovery is not configured on server":"השחזור לא מוגדר בשרת",
+  "Recovery allowed only for super admin email":"השחזור מותר רק לאימייל הסופר אדמין",
+  "Recovery allowed only for admin accounts":"השחזור מותר רק לחשבונות מנהל",
+  "Password reset successful. Please sign in.":"איפוס הסיסמה הצליח. התחבר כעת.",
+  "Recovery failed":"השחזור נכשל",
   "Dashboard":"לוח בקרה",
+  "Profile":"פרופיל",
+  "Manage your account settings and security options":"נהל את הגדרות החשבון ואפשרויות האבטחה שלך",
+  "Account Settings":"הגדרות חשבון",
+  "Full Name":"שם מלא",
+  "Your full name":"השם המלא שלך",
+  "Save Profile":"שמור פרופיל",
+  "Password Settings":"הגדרות סיסמה",
+  "Current Password":"סיסמה נוכחית",
+  "Confirm New Password":"אימות סיסמה חדשה",
+  "Change Password":"שנה סיסמה",
+  "Recovery Keys":"מפתחות שחזור",
+  "Keys are hidden until you verify your password.":"המפתחות מוסתרים עד לאימות הסיסמה שלך.",
+  "View Keys":"הצג מפתחות",
+  "Generate New 10 Keys":"צור 10 מפתחות חדשים",
+  "Export Keys":"ייצא מפתחות",
+  "Each key is one-time use. After use it becomes unusable.":"כל מפתח הוא לשימוש חד-פעמי. לאחר שימוש הוא הופך ללא זמין.",
+  "No keys available":"אין מפתחות זמינים",
+  "Used":"בשימוש",
+  "Unused":"זמין",
+  "Profile saved ✓":"הפרופיל נשמר ✓",
+  "Password changed. Please sign in again.":"הסיסמה שונתה. התחבר שוב.",
+  "Passwords do not match":"הסיסמאות אינן תואמות",
+  "Recovery keys regenerated ✓":"מפתחות השחזור נוצרו מחדש ✓",
+  "Recovery keys exported ✓":"מפתחות השחזור יוצאו ✓",
+  "Recovery keys unlocked ✓":"מפתחות השחזור נפתחו ✓",
+  "Failed to load recovery keys":"טעינת מפתחות השחזור נכשלה",
+  "Only owner can manage recovery keys":"רק בעל המערכת יכול לנהל מפתחות שחזור",
+  "Please unlock keys first":"פתח קודם את המפתחות",
+  "Current password is required":"נדרשת סיסמה נוכחית",
+  "Owner access required":"נדרשת גישת בעל מערכת",
+  "Total Keys":"סה\"כ מפתחות",
+  "Usable Keys":"מפתחות זמינים",
+  "Used Keys":"מפתחות בשימוש",
+  "Generate New 10 Keys? Existing keys will be replaced.":"ליצור 10 מפתחות חדשים? המפתחות הקיימים יוחלפו.",
+  "Name too long":"השם ארוך מדי",
+  "Current password is incorrect":"הסיסמה הנוכחית שגויה",
   "Global Prompt":"פרומפט גלובלי",
   "Restaurants":"מסעדות",
   "Reservations":"הזמנות מקום",
@@ -1964,6 +2212,7 @@ function setLang(l) {
   });
   translateTree(document.body);
   installI18nObserver();
+  setProfileQuickLabel();
   updateSidebarToggleIcon();
 }
 
@@ -1982,6 +2231,10 @@ let me      = null;
 let rCache  = [];
 let oCache  = [];
 let uCache  = [];
+let profileData = null;
+let recoveryKeys = [];
+let ownerKeysUnlocked = false;
+let ownerKeysPassword = '';
 let selId   = null;
 let editUid = null;
 let editOrderId = null;
@@ -2016,20 +2269,27 @@ async function api(path, opts = {}) {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 function showAuth(msg) {
   document.getElementById('authOverlay').classList.remove('hidden');
-  document.getElementById('authErr').textContent = msg ? t(msg) : '';
+  const err = document.getElementById('authErr');
+  err.style.color = '';
+  err.textContent = msg ? t(msg) : '';
+  document.getElementById('recoveryBox').style.display = 'none';
 }
 
 function hideAuth() {
   document.getElementById('authOverlay').classList.add('hidden');
-  document.getElementById('authErr').textContent = '';
+  const err = document.getElementById('authErr');
+  err.style.color = '';
+  err.textContent = '';
+  document.getElementById('recoveryBox').style.display = 'none';
 }
 
 async function login() {
   const email = document.getElementById('authEmail').value.trim();
   const pass  = document.getElementById('authPassword').value;
   const err   = document.getElementById('authErr');
+  err.style.color = '';
   err.textContent = '';
-  if (!email || !pass) { err.textContent = 'Please fill in all fields'; return; }
+  if (!email || !pass) { err.textContent = t('Please fill in all fields'); return; }
   try {
     const r = await fetch(`${API_BASE}/auth/login`, {
       method:'POST',
@@ -2042,16 +2302,81 @@ async function login() {
     localStorage.setItem('auth_token', token);
     hideAuth();
     await boot();
-  } catch { err.textContent = 'Invalid email or password'; }
+  } catch { err.textContent = t('Invalid email or password'); }
 }
 
 document.getElementById('authPassword').addEventListener('keydown', e => e.key === 'Enter' && login());
 
+function toggleRecovery() {
+  const box = document.getElementById('recoveryBox');
+  if (!box) return;
+  box.style.display = box.style.display === 'block' ? 'none' : 'block';
+}
+
+async function recoverSuperAdmin() {
+  const email = document.getElementById('authEmail').value.trim().toLowerCase();
+  const recoveryKey = document.getElementById('fpRecoveryKey').value.trim();
+  const newPassword = document.getElementById('fpNewPassword').value;
+  const err = document.getElementById('authErr');
+  err.textContent = '';
+
+  if (!email || !email.includes('@')) {
+    err.textContent = t('Invalid email');
+    return;
+  }
+  if (!recoveryKey) {
+    err.textContent = t('Recovery key is required');
+    return;
+  }
+  if (!newPassword || newPassword.length < 6) {
+    err.textContent = t('Password must be 6+ characters');
+    return;
+  }
+
+  try {
+    const r = await fetch(`${API_BASE}/auth/recover-super-admin`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email,
+        recovery_key: recoveryKey,
+        new_password: newPassword
+      })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.detail || 'Recovery failed');
+
+    document.getElementById('authEmail').value = email;
+    document.getElementById('authPassword').value = '';
+    document.getElementById('fpRecoveryKey').value = '';
+    document.getElementById('fpNewPassword').value = '';
+    document.getElementById('recoveryBox').style.display = 'none';
+    err.style.color = 'var(--green)';
+    err.textContent = t('Password reset successful. Please sign in.');
+  } catch (e) {
+    err.style.color = '';
+    err.textContent = t(e?.message || 'Recovery failed');
+  }
+}
+
+document.getElementById('fpNewPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') recoverSuperAdmin();
+});
+
+document.getElementById('recoveryUnlockPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') unlockRecoveryKeys();
+});
+
 async function logout() {
   try { if (token) await api(`${API_BASE}/auth/logout`, { method:'POST' }); } catch {}
   token = '';
+  me = null;
   localStorage.removeItem('auth_token');
   inited = false;
+  ownerKeysUnlocked = false;
+  ownerKeysPassword = '';
+  recoveryKeys = [];
+  setProfileQuickLabel();
   showAuth('');
 }
 
@@ -2069,6 +2394,221 @@ function applyRole() {
   const admin = !!me?.is_admin;
   document.getElementById('navGlobal').style.display = admin ? '' : 'none';
   document.getElementById('createBtn').style.display = admin ? '' : 'none';
+  setProfileQuickLabel();
+}
+
+function setProfileQuickLabel() {
+  const el = document.getElementById('profileQuickName');
+  if (!el) return;
+  const label = String(me?.name || me?.email || t('Profile')).trim() || t('Profile');
+  el.textContent = label;
+}
+
+function openProfileFromFooter() {
+  show('profile');
+}
+
+function setRecoveryKeysLockedState(locked) {
+  ownerKeysUnlocked = !locked;
+  if (locked) {
+    ownerKeysPassword = '';
+    recoveryKeys = [];
+  }
+  const unlockBox = document.getElementById('recoveryUnlockBox');
+  const body = document.getElementById('recoveryKeysBody');
+  const regenBtn = document.getElementById('regenKeysBtn');
+  const exportBtn = document.getElementById('exportKeysBtn');
+  if (unlockBox) unlockBox.style.display = locked ? '' : 'none';
+  if (body) body.style.display = locked ? 'none' : '';
+  if (regenBtn) regenBtn.style.display = locked ? 'none' : '';
+  if (exportBtn) exportBtn.style.display = locked ? 'none' : '';
+}
+
+function renderRecoveryKeys() {
+  const list = document.getElementById('recoveryKeysList');
+  const info = document.getElementById('recoveryKeysInfo');
+  if (!list || !info) return;
+
+  if (!recoveryKeys.length) {
+    info.textContent = '';
+    list.innerHTML = `<div style="color:var(--text3);font-size:13px">${t('No keys available')}</div>`;
+    return;
+  }
+
+  const usedCount = recoveryKeys.filter(k => !!k.is_used).length;
+  const usableCount = recoveryKeys.length - usedCount;
+  info.textContent = `${t('Total Keys')}: ${recoveryKeys.length} | ${t('Usable Keys')}: ${usableCount} | ${t('Used Keys')}: ${usedCount}`;
+
+  list.innerHTML = recoveryKeys.map(k => {
+    const status = k.is_used ? t('Used') : t('Unused');
+    const usedAt = k.is_used && k.used_at ? dim(k.used_at) : '';
+    return `
+      <div class="recovery-key ${k.is_used ? 'used' : ''}">
+        <div>
+          <div class="recovery-key-code">${esc(k.key || '')}</div>
+          ${usedAt ? `<div style="margin-top:4px">${usedAt}</div>` : ''}
+        </div>
+        <div class="recovery-key-status">${esc(status)}</div>
+      </div>`;
+  }).join('');
+}
+
+async function loadRecoveryKeys(password) {
+  if (!me?.is_owner) { toast('Only owner can manage recovery keys', 'err'); return false; }
+  if (!password) { toast('Current password is required', 'err'); return false; }
+  try {
+    const r = await api(`${API_BASE}/auth/profile/recovery-keys/unlock`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ current_password: password })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || 'Failed to load recovery keys');
+    recoveryKeys = Array.isArray(d.keys) ? d.keys : [];
+    ownerKeysPassword = password;
+    renderRecoveryKeys();
+    setRecoveryKeysLockedState(false);
+    return true;
+  } catch (e) {
+    toast(e?.message || 'Failed to load recovery keys', 'err');
+    return false;
+  }
+}
+
+function exportRecoveryKeys() {
+  if (!me?.is_owner) { toast('Only owner can manage recovery keys', 'err'); return; }
+  if (!ownerKeysUnlocked) { toast('Please unlock keys first', 'err'); return; }
+  if (!recoveryKeys.length) { toast('No keys available', 'err'); return; }
+  const rows = [['key','status','created','used_at']];
+  for (const k of recoveryKeys) {
+    rows.push([
+      String(k.key || ''),
+      k.is_used ? 'used' : 'unused',
+      String(k.created || ''),
+      String(k.used_at || ''),
+    ]);
+  }
+  const csv = rows.map(cols =>
+    cols.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+  ).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `recovery_keys_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  toast('Recovery keys exported ✓');
+}
+
+async function unlockRecoveryKeys() {
+  const password = document.getElementById('recoveryUnlockPassword')?.value || '';
+  const ok = await loadRecoveryKeys(password.trim());
+  if (!ok) return;
+  const passEl = document.getElementById('recoveryUnlockPassword');
+  if (passEl) passEl.value = '';
+  toast('Recovery keys unlocked ✓');
+}
+
+async function regenerateRecoveryKeys() {
+  if (!me?.is_owner) { toast('Only owner can manage recovery keys', 'err'); return; }
+  if (!ownerKeysUnlocked || !ownerKeysPassword) { toast('Please unlock keys first', 'err'); return; }
+  if (!confirm(t('Generate New 10 Keys? Existing keys will be replaced.'))) return;
+  try {
+    const r = await api(`${API_BASE}/auth/profile/recovery-keys/regenerate`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ current_password: ownerKeysPassword })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || 'Failed');
+    recoveryKeys = Array.isArray(d.keys) ? d.keys : [];
+    renderRecoveryKeys();
+    toast('Recovery keys regenerated ✓');
+  } catch (e) {
+    toast(e?.message || 'Failed', 'err');
+  }
+}
+
+async function loadProfile() {
+  try {
+    const r = await api(`${API_BASE}/auth/profile`);
+    const p = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(p.detail || 'Failed');
+    profileData = p || {};
+    if (me) {
+      me.name = p?.name || '';
+      me.email = p?.email || me.email;
+      me.is_owner = !!p?.is_owner;
+    }
+    setProfileQuickLabel();
+
+    const nameEl = document.getElementById('profileName');
+    const emailEl = document.getElementById('profileEmail');
+    if (nameEl) nameEl.value = p?.name || '';
+    if (emailEl) emailEl.value = p?.email || '';
+
+    const ownerCard = document.getElementById('ownerKeysCard');
+    if (ownerCard) ownerCard.style.display = p?.is_owner ? 'block' : 'none';
+    if (p?.is_owner) setRecoveryKeysLockedState(true);
+  } catch {
+    toast('Failed', 'err');
+  }
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profileName').value.trim();
+  if (name.length > 120) { toast('Name too long', 'err'); return; }
+  try {
+    const r = await api(`${API_BASE}/auth/profile`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ name })
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.detail || 'Save failed');
+    }
+    if (me) me.name = name;
+    setProfileQuickLabel();
+    toast('Profile saved ✓');
+  } catch (e) {
+    toast(e?.message || 'Save failed', 'err');
+  }
+}
+
+async function changeProfilePassword() {
+  const currentPassword = document.getElementById('profileCurrentPassword').value;
+  const newPassword = document.getElementById('profileNewPassword').value;
+  const confirmPassword = document.getElementById('profileConfirmPassword').value;
+  if (!currentPassword || !newPassword) { toast('Please fill in all fields', 'err'); return; }
+  if (newPassword.length < 6) { toast('Password must be 6+ characters', 'err'); return; }
+  if (newPassword !== confirmPassword) { toast('Passwords do not match', 'err'); return; }
+
+  try {
+    const r = await api(`${API_BASE}/auth/profile/password`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.detail || 'Failed');
+
+    token = '';
+    me = null;
+    inited = false;
+    ownerKeysUnlocked = false;
+    ownerKeysPassword = '';
+    recoveryKeys = [];
+    localStorage.removeItem('auth_token');
+    document.getElementById('profileCurrentPassword').value = '';
+    document.getElementById('profileNewPassword').value = '';
+    document.getElementById('profileConfirmPassword').value = '';
+    showAuth('Password changed. Please sign in again.');
+  } catch (e) {
+    toast(e?.message || 'Failed', 'err');
+  }
 }
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
@@ -2097,6 +2637,7 @@ function show(id, btn) {
   if (id === 'logs')        loadLogs();
   if (id === 'orders' || id === 'reservations') loadOrders();
   if (id === 'restaurants') loadRestaurants();
+  if (id === 'profile')     loadProfile();
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
