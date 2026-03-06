@@ -457,8 +457,9 @@ def save_api_usage(
 
     cost_usd = _estimate_cost_usd(model, input_tokens, output_tokens, cached_input_tokens)
     payload_meta = {}
-    if call_sid:
-        payload_meta["call_sid"] = str(call_sid)
+    clean_call_sid = str(call_sid or "").strip() or None
+    if clean_call_sid:
+        payload_meta["call_sid"] = clean_call_sid
     if isinstance(meta, dict) and meta:
         payload_meta.update(meta)
     meta_json = json.dumps(payload_meta) if payload_meta else None
@@ -467,6 +468,7 @@ def save_api_usage(
     try:
         db.add(models.ApiUsageLog(
             restaurant_id=restaurant_id,
+            call_sid=clean_call_sid,
             endpoint=str(endpoint or "")[:80] or "unknown",
             model=str(model or "unknown")[:120],
             input_tokens=input_tokens,

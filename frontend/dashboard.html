@@ -1450,10 +1450,10 @@ table.tbl {
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th>
+            <th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Cost</th><th>Date</th>
           </tr></thead>
           <tbody id="recentLogs">
-            <tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No recent calls</div></div></td></tr>
+            <tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No recent calls</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1664,10 +1664,10 @@ table.tbl {
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>#</th><th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th><th>Transcript</th>
+            <th>#</th><th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Cost</th><th>Date</th><th>Transcript</th>
           </tr></thead>
           <tbody id="logTable">
-            <tr><td colspan="7"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>
+            <tr><td colspan="8"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1756,6 +1756,7 @@ const HE = {
   "Est. Cost":"עלות משוערת",
   "Caller":"מתקשר",
   "Status":"סטטוס",
+  "Cost":"עלות",
   "Duration":"משך",
   "Date":"תאריך",
   "No recent calls":"אין שיחות אחרונות",
@@ -2120,6 +2121,14 @@ function fmtDur(s) {
   return `${sec}s`;
 }
 
+function fmtUsd(v) {
+  const n = Number(v || 0);
+  if (!Number.isFinite(n)) return '$0.000000';
+  const abs = Math.abs(n);
+  const digits = abs >= 1 ? 4 : (abs >= 0.01 ? 5 : 6);
+  return `$${n.toFixed(digits)}`;
+}
+
 function statusBadge(s) {
   if (!s) return `<span class="badge badge-amber">Unknown</span>`;
   const sl = s.toLowerCase();
@@ -2201,15 +2210,21 @@ async function loadLogs() {
     const tbody = document.getElementById('logTable');
     const recent = document.getElementById('recentLogs');
     if (!logs.length) {
-      tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>`;
       return;
     }
+    const callCostCell = l => (
+      Number(l.api_usage_events || 0) > 0 || Number(l.api_cost_usd || 0) > 0
+        ? monospace(fmtUsd(l.api_cost_usd))
+        : `<span style="color:var(--text3)">-</span>`
+    );
     const row = l => `<tr>
       <td>${dim('#' + l.id)}</td>
       <td style="font-weight:500">${esc(l.restaurant)}</td>
       <td>${monospace(l.caller)}</td>
       <td>${statusBadge(l.status)}</td>
       <td>${monospace(fmtDur(l.duration))}</td>
+      <td>${callCostCell(l)}</td>
       <td>${dim(l.created)}</td>
       <td>
         <button class="btn btn-secondary btn-xs" onclick="openTranscriptModal(${Number(l.id)})" ${l.call_sid ? '' : 'disabled'}>${t('View')}</button>
@@ -2221,6 +2236,7 @@ async function loadLogs() {
       <td>${monospace(l.caller)}</td>
       <td>${statusBadge(l.status)}</td>
       <td>${monospace(fmtDur(l.duration))}</td>
+      <td>${callCostCell(l)}</td>
       <td>${dim(l.created)}</td>
     </tr>`).join('');
   } catch {}

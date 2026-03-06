@@ -52,6 +52,11 @@ def ensure_schema():
         except Exception:
             pass
         try:
+            if not _column_exists(conn, "api_usage_logs", "call_sid"):
+                conn.execute(text("ALTER TABLE api_usage_logs ADD COLUMN call_sid VARCHAR(100) NULL"))
+        except Exception:
+            pass
+        try:
             if not _column_exists(conn, "restaurants", "precall_notice_text"):
                 conn.execute(text("ALTER TABLE restaurants ADD COLUMN precall_notice_text TEXT NULL"))
         except Exception:

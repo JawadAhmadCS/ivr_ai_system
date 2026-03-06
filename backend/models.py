@@ -90,6 +90,7 @@ class ApiUsageLog(Base):
     __tablename__ = "api_usage_logs"
     id = Column(Integer, primary_key=True)
     restaurant_id = Column(Integer, index=True, nullable=True)
+    call_sid = Column(String(100), index=True, nullable=True)
     endpoint = Column(String(80), nullable=False)
     model = Column(String(120), nullable=False)
     input_tokens = Column(Integer, default=0)
