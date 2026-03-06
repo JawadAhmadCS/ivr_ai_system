@@ -1306,8 +1306,13 @@ table.tbl {
       <span class="nav-label" data-i18n="Restaurants">Restaurants</span>
     </button>
 
+    <button class="nav-btn" onclick="show('reservations',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="nav-label">Reservations</span>
+    </button>
+
     <button class="nav-btn" onclick="show('orders',this)">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
       <span class="nav-label" data-i18n="Orders">Orders</span>
     </button>
 
@@ -1525,46 +1530,54 @@ table.tbl {
     </div>
   </div>
 
-  <!-- Orders -->
-  <div id="orders" class="page">
+  <!-- Reservations -->
+  <div id="reservations" class="page">
     <div class="page-head">
-      <div class="page-title">Orders</div>
-      <div class="page-sub">Reservations and food orders captured from voice calls</div>
+      <div class="page-title">Reservations</div>
+      <div class="page-sub">Reservation data captured from voice calls</div>
     </div>
 
     <div class="card">
       <div class="card-head">
-        <div class="card-icon">📦</div>
-        <div class="card-title">Reservations</div>
+        <div class="card-icon">📅</div>
+        <div class="card-title">All Reservations</div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>#</th><th>Restaurant</th><th>Customer</th><th>Type</th>
+            <th>#</th><th>Restaurant</th><th>Customer</th>
             <th>Date</th><th>Time</th><th>Guests</th><th>Phone</th>
             <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
           </tr></thead>
           <tbody id="reservationTable">
-            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No reservations yet</div></div></td></tr>
+            <tr><td colspan="11"><div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No reservations yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <div class="card" style="margin-top:18px">
+  <!-- Orders -->
+  <div id="orders" class="page">
+    <div class="page-head">
+      <div class="page-title">Orders</div>
+      <div class="page-sub">Food order data captured from voice calls</div>
+    </div>
+
+    <div class="card">
       <div class="card-head">
         <div class="card-icon">🛒</div>
-        <div class="card-title">Food Orders</div>
+        <div class="card-title">All Food Orders</div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>#</th><th>Restaurant</th><th>Customer</th><th>Type</th>
-            <th>Delivery Type</th><th>Address</th><th>Items</th><th>Phone</th>
+            <th>#</th><th>Restaurant</th><th>Customer</th>
+            <th>Delivery Type</th><th>Address</th><th>Items</th><th>Phone</th><th>Payment</th>
             <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
           </tr></thead>
           <tbody id="foodOrderTable">
-            <tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No food orders yet</div></div></td></tr>
+            <tr><td colspan="12"><div class="empty"><div class="empty-icon">🛒</div><div class="empty-text">No food orders yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1754,7 +1767,7 @@ function show(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   if (id === 'logs')        loadLogs();
-  if (id === 'orders')      loadOrders();
+  if (id === 'orders' || id === 'reservations') loadOrders();
   if (id === 'restaurants') loadRestaurants();
 }
 
@@ -1990,20 +2003,11 @@ function getOrderViewMeta(order) {
   return { raw, rawCustomer, rawItems, isFoodOrder };
 }
 
-function renderOrderRow(o) {
-  const { raw, rawCustomer, rawItems, isFoodOrder } = getOrderViewMeta(o);
-  const dateArrival = isFoodOrder
-    ? (String(raw?.delivery_type ?? '').trim() || '-')
-    : (o['date-arrival'] || o.date_arrival || o.address || '');
-  const timeArrival = isFoodOrder
-    ? (formatDeliveryAddress(raw?.delivery_address) || '-')
-    : (o.time_arrival || o['time-arrival'] || o.house_number || '');
-  const totalPeoples = isFoodOrder
-    ? (summarizeOrderedItems(rawItems) || o.ordered_items || '')
-    : (o.total_peoples ?? o.ordered_items ?? '');
-  const contact = isFoodOrder
-    ? (String(rawCustomer?.contact_number ?? '').trim() || o.caller || '')
-    : (o.contact_number || o.payment_method || '');
+function renderReservationRow(o) {
+  const dateArrival = o['date-arrival'] || o.date_arrival || o.address || '';
+  const timeArrival = o.time_arrival || o['time-arrival'] || o.house_number || '';
+  const guests = o.total_peoples ?? o.ordered_items ?? '';
+  const contact = o.contact_number || o.payment_method || '';
   const statusNorm = normalizeOrderStatus(o.status);
   const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
   const statusCell = canQuickDone
@@ -2017,10 +2021,9 @@ function renderOrderRow(o) {
     <td>${dim('#' + o.id)}</td>
     <td style="font-weight:500">${esc(o.restaurant)}</td>
     <td>${monospace(o.full_name)}</td>
-    <td><span class="badge badge-purple">${esc(o.order_type)}</span></td>
     <td>${monospace(dateArrival)}</td>
     <td>${monospace(timeArrival)}</td>
-    <td>${monospace(totalPeoples)}</td>
+    <td>${monospace(guests)}</td>
     <td>${monospace(contact)}</td>
     <td>${recCell}</td>
     <td>${statusCell}</td>
@@ -2033,13 +2036,50 @@ function renderOrderRow(o) {
   </tr>`;
 }
 
-function renderOrdersTable(tbody, rows, emptyText) {
+function renderFoodOrderRow(o) {
+  const { raw, rawCustomer, rawItems } = getOrderViewMeta(o);
+  const customer = String(rawCustomer?.full_name ?? '').trim() || o.full_name || '';
+  const deliveryType = String(raw?.delivery_type ?? '').trim() || '-';
+  const deliveryAddress = formatDeliveryAddress(raw?.delivery_address) || '-';
+  const items = summarizeOrderedItems(rawItems) || o.ordered_items || '';
+  const contact = String(rawCustomer?.contact_number ?? '').trim() || o.caller || '';
+  const payment = String(raw?.payment_method ?? '').trim() || o.contact_number || o.payment_method || '';
+  const statusNorm = normalizeOrderStatus(o.status);
+  const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
+  const statusCell = canQuickDone
+    ? `<button class="status-btn" onclick="quickCompleteOrder(${o.id})" title="Click to mark completed">${orderStatusBadge(statusNorm)}</button>`
+    : orderStatusBadge(statusNorm);
+  const rec = recUrl(o.recording_url);
+  const recCell = rec
+    ? `<audio controls preload="none" src="${esc(rec)}" style="width:170px;height:28px"></audio>`
+    : `<span style="color:var(--text3)">-</span>`;
+  return `<tr>
+    <td>${dim('#' + o.id)}</td>
+    <td style="font-weight:500">${esc(o.restaurant)}</td>
+    <td>${monospace(customer)}</td>
+    <td>${monospace(deliveryType)}</td>
+    <td>${monospace(deliveryAddress)}</td>
+    <td>${monospace(items)}</td>
+    <td>${monospace(contact)}</td>
+    <td>${monospace(payment)}</td>
+    <td>${recCell}</td>
+    <td>${statusCell}</td>
+    <td>${dim(o.created)}</td>
+    <td>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderOrdersTable(tbody, rows, emptyText, colspan, rowRenderer, emptyIcon) {
   if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">${esc(emptyText)}</div></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colspan}"><div class="empty"><div class="empty-icon">${esc(emptyIcon || '📦')}</div><div class="empty-text">${esc(emptyText)}</div></div></td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(renderOrderRow).join('');
+  tbody.innerHTML = rows.map(rowRenderer).join('');
 }
 async function loadOrders() {
   try {
@@ -2054,8 +2094,8 @@ async function loadOrders() {
       if (isFoodOrder) foodOrders.push(o);
       else reservations.push(o);
     }
-    renderOrdersTable(reservationTable, reservations, 'No reservations yet');
-    renderOrdersTable(foodOrderTable, foodOrders, 'No food orders yet');
+    renderOrdersTable(reservationTable, reservations, 'No reservations yet', 11, renderReservationRow, '📅');
+    renderOrdersTable(foodOrderTable, foodOrders, 'No food orders yet', 12, renderFoodOrderRow, '🛒');
   } catch {}
 }
 
