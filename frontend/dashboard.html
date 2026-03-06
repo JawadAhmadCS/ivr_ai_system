@@ -2530,6 +2530,69 @@ async function updateR(id) {
   } catch { toast('Save failed', 'err'); }
 }
 
+function renderOpeningAudioBoxHtml(r) {
+  const rec = recUrl(r?.precall_notice_audio_url);
+  if (!rec) {
+    return `<span style="color:var(--text3)">No opening audio uploaded</span>`;
+  }
+  return `
+    <audio controls preload="none" src="${esc(rec)}" style="width:100%;max-width:340px;height:32px"></audio>
+    <div class="btn-row" style="margin-top:8px">
+      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">Open File</a>
+    </div>`;
+}
+
+function refreshOpeningAudioBox(id) {
+  const box = document.getElementById(`r-audio-box-${id}`);
+  const r = rCache.find(x => x.id === id);
+  if (!box || !r) return;
+  box.innerHTML = renderOpeningAudioBoxHtml(r);
+}
+
+async function uploadOpeningAudio(id) {
+  const input = document.getElementById(`r-audio-file-${id}`);
+  const file = input?.files?.[0];
+  if (!file) { toast('Select an audio file first', 'err'); return; }
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res = await api(`${API_BASE}/restaurants/${id}/opening-audio`, {
+      method: 'POST',
+      body: fd
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+    const r = rCache.find(x => x.id === id);
+    if (r) r.precall_notice_audio_url = data.precall_notice_audio_url || '';
+    if (input) input.value = '';
+    refreshOpeningAudioBox(id);
+    toast('Opening audio uploaded ✓');
+  } catch (e) {
+    toast(e.message || 'Upload failed', 'err');
+  }
+}
+
+async function deleteOpeningAudio(id) {
+  if (!confirm('Delete opening audio?')) return;
+  try {
+    const res = await api(`${API_BASE}/restaurants/${id}/opening-audio`, { method:'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Delete failed');
+
+    const r = rCache.find(x => x.id === id);
+    if (r) r.precall_notice_audio_url = '';
+    const input = document.getElementById(`r-audio-file-${id}`);
+    if (input) input.value = '';
+    refreshOpeningAudioBox(id);
+    toast('Opening audio removed');
+  } catch (e) {
+    toast(e.message || 'Delete failed', 'err');
+  }
+}
+
 async function toggleR(id) {
   try {
     await api(`${API_BASE}/restaurants/toggle/${id}`, { method:'POST' });
@@ -2841,6 +2904,17 @@ function openR(id, silent) {
       <div class="form-group">
         <label class="form-label">Pre-call Notice</label>
         <textarea id="rnt-${r.id}" placeholder="Optional opening message before AI starts">${esc(r.precall_notice_text||'')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Opening Audio (Upload Recording)</label>
+        <div class="order-recording-box" id="r-audio-box-${r.id}">
+          ${renderOpeningAudioBoxHtml(r)}
+        </div>
+        <div class="btn-row" style="margin-top:10px;align-items:center;gap:8px;flex-wrap:wrap">
+          <input id="r-audio-file-${r.id}" type="file" accept="audio/*" style="max-width:280px">
+          <button class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">Upload Audio</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">Remove Audio</button>
+        </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="updateR(${r.id})">

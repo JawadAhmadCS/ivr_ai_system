@@ -11,6 +11,7 @@ class Restaurant(Base):
     active = Column(Boolean, default=True)
     ivr_text = Column(Text)
     precall_notice_text = Column(Text)
+    precall_notice_audio_url = Column(String(500), nullable=True)
 
 class CallLog(Base):
     __tablename__ = "call_logs"

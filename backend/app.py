@@ -3,6 +3,7 @@ import json
 import asyncio
 import logging
 import time
+import mimetypes
 import websockets
 from pathlib import Path
 from datetime import datetime
@@ -251,6 +252,20 @@ def get_precall_notice_text(restaurant_id: int | None) -> str:
             return PRECALL_NOTICE_TEXT
         custom_text = (r.precall_notice_text or "").strip()
         return custom_text or PRECALL_NOTICE_TEXT
+    finally:
+        db.close()
+
+
+def get_precall_notice_audio_url(restaurant_id: int | None) -> str:
+    if restaurant_id is None:
+        return PRECALL_NOTICE_AUDIO_URL
+    db = SessionLocal()
+    try:
+        r = db.get(models.Restaurant, restaurant_id)
+        if not r:
+            return PRECALL_NOTICE_AUDIO_URL
+        custom_url = (r.precall_notice_audio_url or "").strip()
+        return custom_url or PRECALL_NOTICE_AUDIO_URL
     finally:
         db.close()
 
@@ -1086,7 +1101,8 @@ async def get_recording_file(filename: str):
         raise HTTPException(status_code=404, detail="Recording not found")
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Recording not found")
-    return FileResponse(path, media_type="audio/wav", filename=safe_name)
+    media_type, _ = mimetypes.guess_type(str(path))
+    return FileResponse(path, media_type=media_type or "application/octet-stream", filename=safe_name)
 
 
 # ── Twilio webhook ─────────────────────────────────────────────────────────────
@@ -1146,8 +1162,9 @@ async def incoming_call(request: Request, restaurant_id: int | None = None):
 
     if PLAY_PRECALL_NOTICE:
         notice_text = get_precall_notice_text(restaurant_id)
-        if PRECALL_NOTICE_AUDIO_URL:
-            response.play(PRECALL_NOTICE_AUDIO_URL)
+        notice_audio_url = get_precall_notice_audio_url(restaurant_id)
+        if notice_audio_url:
+            response.play(notice_audio_url)
         elif notice_text:
             response.say(notice_text, voice="alice")
 
