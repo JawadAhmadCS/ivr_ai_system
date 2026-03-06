@@ -957,6 +957,71 @@ table.tbl {
   padding:12px;
 }
 
+.transcript-modal-card {
+  width:min(860px,96vw);
+  max-height:88vh;
+  overflow:auto;
+}
+
+.transcript-box {
+  background:var(--bg);
+  border:1px solid var(--border2);
+  border-radius:var(--radius-sm);
+  padding:12px;
+  max-height:52vh;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.transcript-line {
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 12px;
+  background:var(--surface2);
+}
+
+.transcript-line.user {
+  border-color:rgba(59,130,246,.28);
+  background:rgba(59,130,246,.09);
+}
+
+.transcript-line.assistant {
+  border-color:rgba(34,197,94,.2);
+  background:rgba(34,197,94,.08);
+}
+
+.transcript-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:5px;
+  gap:10px;
+}
+
+.transcript-speaker {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text3);
+}
+
+.transcript-time {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:var(--text3);
+}
+
+.transcript-text {
+  font-size:13.5px;
+  line-height:1.55;
+  color:#dbe4f0;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
 .status-btn {
   background:transparent;
   border:none;
@@ -1163,6 +1228,41 @@ table.tbl {
         <button class="btn btn-secondary btn-sm" onclick="closeOrderModal()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveOrderModal()">Save Changes</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Transcript Modal -->
+<div id="transcriptOverlay" class="modal-overlay hidden">
+  <div class="modal-card transcript-modal-card">
+    <div class="modal-title">Call Transcript</div>
+    <div class="modal-sub">User and assistant utterances captured during the call</div>
+
+    <div class="order-modal-meta">
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Call</div>
+        <div class="order-modal-v" id="transcriptMetaCall">-</div>
+      </div>
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Restaurant</div>
+        <div class="order-modal-v" id="transcriptMetaRestaurant">-</div>
+      </div>
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Caller</div>
+        <div class="order-modal-v" id="transcriptMetaCaller">-</div>
+      </div>
+      <div class="order-modal-kv">
+        <div class="order-modal-k">Created</div>
+        <div class="order-modal-v" id="transcriptMetaCreated">-</div>
+      </div>
+    </div>
+
+    <div id="transcriptBox" class="transcript-box">
+      <div style="color:var(--text3);font-size:13px">No transcript available for this call.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm" onclick="closeTranscriptModal()">Close</button>
     </div>
   </div>
 </div>
@@ -1462,10 +1562,10 @@ table.tbl {
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>#</th><th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th>
+            <th>#</th><th>Restaurant</th><th>Caller</th><th>Status</th><th>Duration</th><th>Date</th><th>Transcript</th>
           </tr></thead>
           <tbody id="logTable">
-            <tr><td colspan="6"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>
+            <tr><td colspan="7"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1530,6 +1630,7 @@ let selId   = null;
 let editUid = null;
 let editOrderId = null;
 let statusConfirmOrderId = null;
+let transcriptCallId = null;
 let assignOpen = false;
 let assignRid  = null;
 let collapsed  = localStorage.getItem('sb_col') === '1';
@@ -1736,7 +1837,7 @@ async function loadLogs() {
     const tbody = document.getElementById('logTable');
     const recent = document.getElementById('recentLogs');
     if (!logs.length) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📵</div><div class="empty-text">No calls recorded yet</div></div></td></tr>`;
       return;
     }
     const row = l => `<tr>
@@ -1746,6 +1847,9 @@ async function loadLogs() {
       <td>${statusBadge(l.status)}</td>
       <td>${monospace(fmtDur(l.duration))}</td>
       <td>${dim(l.created)}</td>
+      <td>
+        <button class="btn btn-secondary btn-xs" onclick="openTranscriptModal(${Number(l.id)})" ${l.call_sid ? '' : 'disabled'}>View</button>
+      </td>
     </tr>`;
     tbody.innerHTML  = logs.map(row).join('');
     recent.innerHTML = logs.slice(0,5).map(l => `<tr>
@@ -1759,6 +1863,57 @@ async function loadLogs() {
 }
 
 // ─── ORDERS ──────────────────────────────────────────────────────────────────
+function closeTranscriptModal() {
+  transcriptCallId = null;
+  document.getElementById('transcriptOverlay').classList.add('hidden');
+}
+
+function renderTranscriptItems(items) {
+  const box = document.getElementById('transcriptBox');
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) {
+    box.innerHTML = `<div style="color:var(--text3);font-size:13px">No transcript available for this call.</div>`;
+    return;
+  }
+  box.innerHTML = rows.map(r => {
+    const speaker = String(r.speaker || '').toLowerCase() === 'user' ? 'User' : 'Assistant';
+    const cls = String(r.speaker || '').toLowerCase() === 'user' ? 'user' : 'assistant';
+    const created = r.created ? dim(r.created) : '';
+    return `<div class="transcript-line ${cls}">
+      <div class="transcript-head">
+        <div class="transcript-speaker">${speaker}</div>
+        <div class="transcript-time">${created}</div>
+      </div>
+      <div class="transcript-text">${esc(r.content || '')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function openTranscriptModal(callId) {
+  const id = Number(callId);
+  if (!id) { toast('Invalid call id', 'err'); return; }
+  transcriptCallId = id;
+  document.getElementById('transcriptMetaCall').textContent = `#${id}`;
+  document.getElementById('transcriptMetaRestaurant').textContent = '-';
+  document.getElementById('transcriptMetaCaller').textContent = '-';
+  document.getElementById('transcriptMetaCreated').textContent = '-';
+  document.getElementById('transcriptBox').innerHTML = `<div style="color:var(--text3);font-size:13px">Loading transcript...</div>`;
+  document.getElementById('transcriptOverlay').classList.remove('hidden');
+  try {
+    const res = await api(`${API_BASE}/calls/${id}/transcript`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load transcript');
+    const call = data.call || {};
+    document.getElementById('transcriptMetaCall').textContent = `#${call.id || id}`;
+    document.getElementById('transcriptMetaRestaurant').textContent = call.restaurant || '-';
+    document.getElementById('transcriptMetaCaller').textContent = call.caller || '-';
+    document.getElementById('transcriptMetaCreated').textContent = call.created || '-';
+    renderTranscriptItems(data.items || []);
+  } catch (e) {
+    document.getElementById('transcriptBox').innerHTML = `<div style="color:var(--red);font-size:13px">${esc(e.message || 'Failed to load transcript')}</div>`;
+  }
+}
+
 function recUrl(url) {
   const s = String(url || '').trim();
   if (!s) return '';
@@ -2299,6 +2454,10 @@ document.getElementById('orderOverlay').addEventListener('click', e => {
   if (e.target.id==='orderOverlay') closeOrderModal();
 });
 
+document.getElementById('transcriptOverlay').addEventListener('click', e => {
+  if (e.target.id==='transcriptOverlay') closeTranscriptModal();
+});
+
 document.getElementById('statusConfirmOverlay').addEventListener('click', e => {
   if (e.target.id==='statusConfirmOverlay') closeStatusConfirm();
 });
@@ -2307,6 +2466,7 @@ document.addEventListener('keydown', e => {
   if (e.key==='Escape') {
     closeEditUser();
     closeOrderModal();
+    closeTranscriptModal();
     closeStatusConfirm();
   }
 });

@@ -17,8 +17,22 @@ class CallLog(Base):
     restaurant_id = Column(Integer, index=True, nullable=True)
     restaurant = Column(String(200))
     caller = Column(String(50))
+    call_sid = Column(String(100), index=True, nullable=True)
     duration = Column(Float, default=0)
     status = Column(String(50))
+    created = Column(DateTime, default=datetime.utcnow)
+
+
+class CallTranscript(Base):
+    __tablename__ = "call_transcripts"
+    id = Column(Integer, primary_key=True)
+    call_sid = Column(String(100), index=True, nullable=False)
+    restaurant_id = Column(Integer, index=True, nullable=True)
+    restaurant = Column(String(200))
+    caller = Column(String(50))
+    speaker = Column(String(20), nullable=False)  # user | assistant
+    content = Column(Text, nullable=False)
+    seq = Column(Integer, default=0, nullable=False)
     created = Column(DateTime, default=datetime.utcnow)
 
 

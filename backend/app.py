@@ -213,13 +213,14 @@ def resolve_restaurant_id_by_phone(number: str | None) -> int | None:
         db.close()
 
 
-def save_call_log(restaurant_id, restaurant_name, caller, duration, status):
+def save_call_log(restaurant_id, restaurant_name, caller, duration, status, call_sid: str | None = None):
     db = SessionLocal()
     try:
         db.add(models.CallLog(
             restaurant_id=restaurant_id,
             restaurant=restaurant_name,
             caller=caller,
+            call_sid=(str(call_sid or "").strip() or None),
             duration=duration,
             status=status,
         ))
@@ -383,6 +384,54 @@ def save_api_usage(
     except Exception:
         logger.exception("[USAGE] Failed to save usage log")
         db.rollback()
+    finally:
+        db.close()
+
+
+def save_call_transcript_batch(
+    *,
+    call_sid: str,
+    restaurant_id: int | None,
+    restaurant_name: str,
+    caller: str,
+    entries: list[dict],
+) -> int:
+    clean_sid = str(call_sid or "").strip()
+    if not clean_sid or not entries:
+        return 0
+
+    rows = []
+    seq = 0
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        speaker = str(item.get("speaker") or "").strip().lower()
+        content = str(item.get("content") or "").strip()
+        if speaker not in {"user", "assistant"} or not content:
+            continue
+        seq += 1
+        rows.append(models.CallTranscript(
+            call_sid=clean_sid,
+            restaurant_id=restaurant_id,
+            restaurant=restaurant_name,
+            caller=caller,
+            speaker=speaker,
+            content=content[:4000],
+            seq=seq,
+        ))
+
+    if not rows:
+        return 0
+
+    db = SessionLocal()
+    try:
+        db.add_all(rows)
+        db.commit()
+        return len(rows)
+    except Exception:
+        logger.exception("[TRANSCRIPT] Failed to persist transcript for call_sid=%s", clean_sid)
+        db.rollback()
+        return 0
     finally:
         db.close()
 
@@ -740,6 +789,70 @@ def texts_from_event(ev: dict) -> list[str]:
 
 
 # ── Startup ────────────────────────────────────────────────────────────────────
+def _normalize_transcript_line(value: str | None) -> str:
+    s = str(value or "").strip()
+    if not s:
+        return ""
+    return " ".join(s.split())
+
+
+def user_transcript_from_event(ev: dict) -> str:
+    if not isinstance(ev, dict):
+        return ""
+    etype = str(ev.get("type") or "")
+    if etype not in {
+        "conversation.item.input_audio_transcription.completed",
+        "input_audio_transcription.completed",
+    }:
+        return ""
+
+    candidates: list[str | None] = [
+        ev.get("transcript"),
+        ev.get("text"),
+        (ev.get("item") or {}).get("transcript") if isinstance(ev.get("item"), dict) else None,
+    ]
+    item = ev.get("item")
+    if isinstance(item, dict):
+        for part in item.get("content") or []:
+            if isinstance(part, dict):
+                candidates.append(part.get("transcript"))
+                candidates.append(part.get("text"))
+
+    for candidate in candidates:
+        normalized = _normalize_transcript_line(candidate)
+        if normalized:
+            return normalized
+    return ""
+
+
+def assistant_transcripts_from_response_done(ev: dict) -> list[str]:
+    if not isinstance(ev, dict) or ev.get("type") != "response.done":
+        return []
+
+    out: list[str] = []
+    response = ev.get("response")
+    if not isinstance(response, dict):
+        return out
+
+    for item in response.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role and role != "assistant":
+            continue
+        parts = []
+        for part in item.get("content") or []:
+            if not isinstance(part, dict):
+                continue
+            for key in ("transcript", "text"):
+                normalized = _normalize_transcript_line(part.get(key))
+                if normalized:
+                    parts.append(normalized)
+        if parts:
+            out.append(" ".join(parts))
+    return out
+
+
 @app.on_event("startup")
 async def startup_event():
     ok, detail = check_openai_connectivity()
@@ -1071,6 +1184,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             full_text     = ""
             order_saved   = False
             recording_sid = None
+            transcript_entries: list[dict] = []
 
             def log_call():
                 nonlocal logged
@@ -1081,6 +1195,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 save_call_log(
                     restaurant_id, restaurant_name, caller, float(duration),
                     "missed" if duration < 3 else "completed",
+                    call_sid=call_sid,
                 )
 
             async def oai(msg: dict):
@@ -1094,6 +1209,17 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     await websocket.send_json(msg)
                 except Exception as e:
                     logger.debug("[TWI-SEND] %s", e)
+
+            def add_transcript_line(speaker: str, content: str):
+                sp = str(speaker or "").strip().lower()
+                line = _normalize_transcript_line(content)
+                if sp not in {"user", "assistant"} or not line:
+                    return
+                if transcript_entries:
+                    prev = transcript_entries[-1]
+                    if prev.get("speaker") == sp and prev.get("content") == line:
+                        return
+                transcript_entries.append({"speaker": sp, "content": line})
 
             def try_save_from_payload(payload: dict, source: str) -> bool:
                 nonlocal order_saved
@@ -1219,6 +1345,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     ev    = json.loads(raw)
                     etype = ev.get("type", "")
 
+                    user_line = user_transcript_from_event(ev)
+                    if user_line:
+                        add_transcript_line("user", user_line)
+
                     if REALTIME_LOG_EVERY_EVENT:
                         logger.info("[OAI-EVENT] %s", etype)
 
@@ -1228,6 +1358,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
                     elif etype in {"response.done", "response.cancelled"}:
                         if etype == "response.done":
+                            for assistant_line in assistant_transcripts_from_response_done(ev):
+                                add_transcript_line("assistant", assistant_line)
                             usage_obj = (ev.get("response") or {}).get("usage") or ev.get("usage")
                             if isinstance(usage_obj, dict):
                                 await asyncio.to_thread(
@@ -1300,6 +1432,17 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             finally:
                 log_call()
                 await finalize_order("bridge-finally", allow_extractor=True)
+                try:
+                    await asyncio.to_thread(
+                        save_call_transcript_batch,
+                        call_sid=str(call_sid or ""),
+                        restaurant_id=restaurant_id,
+                        restaurant_name=restaurant_name,
+                        caller=caller,
+                        entries=transcript_entries,
+                    )
+                except Exception:
+                    logger.exception("[TRANSCRIPT] Best-effort flush failed")
 
                 recording_url = None
                 if recording_sid:
