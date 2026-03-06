@@ -269,6 +269,70 @@ body.collapsed .nav-section { padding:10px 0; }
 body.collapsed .system-status { justify-content:center; padding:9px 0; }
 body.collapsed .logout-btn { justify-content:center; padding:9px 0; gap:0; }
 
+/* ── RTL LAYOUT ── */
+html[dir="rtl"] .sidebar {
+  inset:0 0 0 auto;
+  border-right:none;
+  border-left:1px solid var(--border);
+}
+
+html[dir="rtl"] .main {
+  margin-left:0;
+  margin-right:var(--sidebar);
+}
+
+html[dir="rtl"] body.collapsed .main {
+  margin-left:0;
+  margin-right:var(--sidebar-sm);
+}
+
+html[dir="rtl"] .sidebar-toggle {
+  margin-left:0;
+  margin-right:auto;
+}
+
+html[dir="rtl"] body.collapsed .sidebar-toggle {
+  margin-right:0;
+}
+
+html[dir="rtl"] .nav-btn,
+html[dir="rtl"] .r-item,
+html[dir="rtl"] .tbl th,
+html[dir="rtl"] .tbl td {
+  text-align:right;
+}
+
+html[dir="rtl"] .nav-badge,
+html[dir="rtl"] .card-actions {
+  margin-left:0;
+  margin-right:auto;
+}
+
+html[dir="rtl"] #toast {
+  right:auto;
+  left:22px;
+}
+
+html[dir="rtl"] #toast.ok {
+  border-left:none;
+  border-right:3px solid var(--green);
+}
+
+html[dir="rtl"] #toast.err {
+  border-left:none;
+  border-right:3px solid var(--red);
+}
+
+html[dir="rtl"] #lang-switch {
+  right:auto;
+  left:14px;
+}
+
+html[dir="rtl"] .stat-emoji {
+  right:auto;
+  left:18px;
+}
+
 /* ── MAIN ── */
 .main {
   margin-left:var(--sidebar);
@@ -276,7 +340,7 @@ body.collapsed .logout-btn { justify-content:center; padding:9px 0; gap:0; }
   min-height:100vh;
   position:relative;
   z-index:1;
-  transition:margin-left .22s cubic-bezier(.4,0,.2,1);
+  transition:margin-left .22s cubic-bezier(.4,0,.2,1),margin-right .22s cubic-bezier(.4,0,.2,1);
   max-width:1400px;
 }
 
@@ -1097,6 +1161,7 @@ table.tbl {
   .stats-grid { grid-template-columns:1fr 1fr; }
   .sidebar { display:none; }
   .main { margin-left:0; }
+  html[dir="rtl"] .main { margin-right:0; }
 }
 </style>
 </head>
@@ -1887,6 +1952,7 @@ function setLang(l) {
   localStorage.setItem('ui_lang', l);
   const isHe = l === 'he';
   document.documentElement.dir = isHe ? 'rtl' : 'ltr';
+  document.documentElement.lang = isHe ? 'he' : 'en';
   document.body.dir = isHe ? 'rtl' : 'ltr';
   document.querySelectorAll('.lang-opt').forEach(b =>
     b.classList.toggle('on', b.textContent.trim() === (isHe ? 'עב' : 'EN')));
@@ -1897,6 +1963,7 @@ function setLang(l) {
   });
   translateTree(document.body);
   installI18nObserver();
+  updateSidebarToggleIcon();
 }
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -2004,11 +2071,20 @@ function applyRole() {
 }
 
 // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+function updateSidebarToggleIcon() {
+  const btn = document.getElementById('toggleBtn');
+  if (!btn) return;
+  const isRtl = document.documentElement.dir === 'rtl';
+  btn.textContent = isRtl
+    ? (collapsed ? '‹' : '›')
+    : (collapsed ? '›' : '‹');
+}
+
 function toggleSidebar() {
   collapsed = !collapsed;
   localStorage.setItem('sb_col', collapsed ? '1' : '0');
   document.body.classList.toggle('collapsed', collapsed);
-  document.getElementById('toggleBtn').textContent = collapsed ? '›' : '‹';
+  updateSidebarToggleIcon();
 }
 
 // ─── PAGES ───────────────────────────────────────────────────────────────────
@@ -3125,7 +3201,7 @@ function openR(id, silent) {
       <div class="card-head">
         <div class="card-icon">🍽️</div>
         <div class="card-title">${esc(r.name||t('Unnamed'))}</div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <div style="margin-inline-start:auto;display:flex;align-items:center;gap:10px">
           <span class="badge ${active?'badge-green':'badge-red'}">${active ? t('Active') : t('Inactive')}</span>
           ${admin ? `
           <button class="btn btn-secondary btn-sm" onclick="toggleR(${r.id})">${active ? `⏸ ${t('Deactivate')}` : `▶ ${t('Activate')}`}</button>
@@ -3267,6 +3343,8 @@ if (collapsed) document.body.classList.add('collapsed');
 
 // Apply language
 if (lang !== 'en') setLang(lang);
+
+updateSidebarToggleIcon();
 
 // Init
 checkAuth().then(ok => { if (ok) boot(); });
