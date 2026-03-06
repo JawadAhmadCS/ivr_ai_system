@@ -1620,18 +1620,267 @@ table.tbl {
 <script>
 // ─── I18N ────────────────────────────────────────────────────────────────────
 const HE = {
-  "Sign in":"התחבר","Sign in to continue":"התחבר לחשבון שלך","Email":"אימייל","Password":"סיסמה",
-  "Dashboard":"לוח בקרה","Global Prompt":"פרומפט גלובלי","Restaurants":"מסעדות",
-  "Orders":"הזמנות","Call Logs":"יומן שיחות","System Online":"מערכת פעילה",
-  "Logout":"יציאה","Platform":"פלטפורמה","Edit User":"עריכת משתמש",
+  "Sign in":"התחבר",
+  "Sign in to continue":"התחבר לחשבון שלך",
+  "Sign in to your VoiceIQ account":"התחבר לחשבון VoiceIQ שלך",
+  "Email":"אימייל",
+  "Password":"סיסמה",
+  "Please fill in all fields":"נא למלא את כל השדות",
+  "Invalid email or password":"אימייל או סיסמה שגויים",
+  "Dashboard":"לוח בקרה",
+  "Global Prompt":"פרומפט גלובלי",
+  "Restaurants":"מסעדות",
+  "Reservations":"הזמנות מקום",
+  "Orders":"הזמנות",
+  "Customer":"לקוח",
+  "Delivery Type":"סוג משלוח",
+  "Address":"כתובת",
+  "Items":"פריטים",
+  "Payment":"תשלום",
+  "Recording":"הקלטה",
+  "Created":"נוצר",
+  "Actions":"פעולות",
+  "Time":"שעה",
+  "Guests":"סועדים",
+  "Transcript":"תמלול",
+  "All Calls":"כל השיחות",
+  "View":"צפה",
+  "Edit":"ערוך",
+  "Optimize":"שפר",
+  "Active":"פעיל",
+  "Inactive":"לא פעיל",
+  "Activate":"הפעל",
+  "Deactivate":"השבת",
+  "Revoke":"שלול גישה",
+  "Restore":"שחזר גישה",
+  "Unnamed":"ללא שם",
+  "Loading...":"טוען...",
+  "No admins assigned yet":"אין מנהלים משויכים עדיין",
+  "Failed to load admins":"טעינת מנהלים נכשלה",
+  "Edit Reservation":"ערוך הזמנה",
+  "Update reservation details, status, and recording":"עדכן פרטי הזמנה, סטטוס והקלטה",
+  "Admin Review Pending":"ממתין לבדיקת מנהל",
+  "Completed by Admin":"הושלם על ידי מנהל",
+  "Reservation data captured from voice calls":"נתוני הזמנות מקום שנקלטו משיחות קוליות",
+  "Food order data captured from voice calls":"נתוני הזמנות אוכל שנקלטו משיחות קוליות",
+  "Complete history of all IVR interactions":"היסטוריה מלאה של כל אינטראקציות ה-IVR",
+  "Call Logs":"יומן שיחות",
+  "System Online":"מערכת פעילה",
+  "Logout":"יציאה",
+  "Platform":"פלטפורמה",
+  "Edit User":"עריכת משתמש",
   "Update email and password for this user":"עדכון פרטי הכניסה",
-  "Admin Email":"אימייל מנהל","New Password (optional)":"סיסמה חדשה (אופציונלי)",
-  "Cancel":"ביטול","Save Changes":"שמור שינויים"
+  "Update credentials for this user":"עדכן פרטי התחברות למשתמש זה",
+  "Admin Email":"אימייל מנהל",
+  "New Password (optional)":"סיסמה חדשה (אופציונלי)",
+  "Cancel":"ביטול",
+  "Save Changes":"שמור שינויים",
+  "Mark as Completed":"סמן כהושלם",
+  "All Reservations":"כל ההזמנות",
+  "All Food Orders":"כל הזמנות האוכל",
+  "No reservations yet":"אין עדיין הזמנות מקום",
+  "No food orders yet":"אין עדיין הזמנות אוכל",
+  "No calls recorded yet":"עדיין לא נרשמו שיחות",
+  "Real-time overview of your IVR platform":"סקירה בזמן אמת של פלטפורמת ה-IVR שלך",
+  "Recent Activity":"פעילות אחרונה",
+  "Active Restaurants":"מסעדות פעילות",
+  "Total Calls":"סה\"כ שיחות",
+  "Missed Calls":"שיחות שלא נענו",
+  "Total Duration":"משך כולל",
+  "API Usage":"שימוש API",
+  "Est. Cost":"עלות משוערת",
+  "Caller":"מתקשר",
+  "Status":"סטטוס",
+  "Duration":"משך",
+  "Date":"תאריך",
+  "No recent calls":"אין שיחות אחרונות",
+  "Base System Prompt":"פרומפט מערכת בסיסי",
+  "How it works":"איך זה עובד",
+  "This prompt applies to every restaurant on the platform":"הפרומפט הזה חל על כל המסעדות בפלטפורמה",
+  "Prompt Content":"תוכן הפרומפט",
+  "Save":"שמור",
+  "The global prompt sets the baseline personality and rules for all your restaurant AI assistants.":"הפרומפט הגלובלי מגדיר את האישיות והכללים הבסיסיים לכל עוזרי ה-AI של המסעדות.",
+  "Each restaurant's individual IVR prompt is appended after this, allowing customization per location.":"פרומפט ה-IVR הייחודי של כל מסעדה מתווסף לאחר מכן, כדי לאפשר התאמה לכל סניף.",
+  "Manage your connected restaurant profiles and IVR configurations":"נהל את פרופילי המסעדות המחוברות והגדרות ה-IVR",
+  "Locations":"סניפים",
+  "Add restaurant":"הוסף מסעדה",
+  "If the user already exists, we'll just assign them. Otherwise we create a new account.":"אם המשתמש כבר קיים, נשייך אותו בלבד. אחרת ניצור חשבון חדש.",
+  "Select a restaurant to manage it":"בחר מסעדה כדי לנהל אותה",
+  "New Restaurant":"מסעדה חדשה",
+  "Assign Admin":"שיוך מנהל",
+  "Deleted":"נמחק",
+  "Failed":"נכשל",
+  "Fill in email and select restaurant":"מלא אימייל ובחר מסעדה",
+  "Admin assigned ✓":"המנהל שויך ✓",
+  "Admin created & assigned ✓":"המנהל נוצר ושויך ✓",
+  "Invalid email":"אימייל לא תקין",
+  "Password must be 6+ characters":"הסיסמה חייבת להכיל לפחות 6 תווים",
+  "User updated ✓":"המשתמש עודכן ✓",
+  "User deleted":"המשתמש נמחק",
+  "Access restored":"הגישה שוחזרה",
+  "Access revoked":"הגישה נשללה",
+  "Restaurant Name":"שם המסעדה",
+  "Phone Number":"מספר טלפון",
+  "IVR Prompt":"פרומפט IVR",
+  "Pre-call Notice":"הודעה לפני שיחה",
+  "Create Restaurant":"צור מסעדה",
+  "Create / Assign":"צור / שייך",
+  "Restaurant":"מסעדה",
+  "Name":"שם",
+  "Phone":"טלפון",
+  "Voice Test":"בדיקת קול",
+  "Twilio Webhook":"וובהוק של Twilio",
+  "Copy":"העתק",
+  "Upload Audio":"העלה אודיו",
+  "Remove Audio":"הסר אודיו",
+  "Opening Audio (Upload Recording)":"אודיו פתיחה (העלאת הקלטה)",
+  "Send":"שלח",
+  "Delete":"מחק",
+  "Delete Order":"מחק הזמנה",
+  "Delete Recording":"מחק הקלטה",
+  "Delete opening audio?":"למחוק את אודיו הפתיחה?",
+  "Delete this restaurant? This cannot be undone.":"למחוק את המסעדה? לא ניתן לבטל.",
+  "Delete this user? This cannot be undone.":"למחוק את המשתמש? לא ניתן לבטל.",
+  "Open File":"פתח קובץ",
+  "No opening audio uploaded":"לא הועלה אודיו פתיחה",
+  "Order":"הזמנה",
+  "Customer Name":"שם לקוח",
+  "Order Type":"סוג הזמנה",
+  "Arrival Date":"תאריך הגעה",
+  "Arrival Time":"שעת הגעה",
+  "Contact Number":"מספר קשר",
+  "No recording attached":"אין הקלטה מצורפת",
+  "Call Transcript":"תמלול שיחה",
+  "User and assistant utterances captured during the call":"דברי המשתמש והעוזר שנקלטו במהלך השיחה",
+  "Close":"סגור",
+  "User":"משתמש",
+  "Assistant":"עוזר",
+  "Loading transcript...":"טוען תמלול...",
+  "No transcript available for this call.":"אין תמלול זמין לשיחה זו.",
+  "Status updated":"הסטטוס עודכן",
+  "Status update failed":"עדכון הסטטוס נכשל",
+  "Order updated ✓":"ההזמנה עודכנה ✓",
+  "Order deleted":"ההזמנה נמחקה",
+  "Delete failed":"המחיקה נכשלה",
+  "Recording deleted":"ההקלטה נמחקה",
+  "Failed to delete recording":"מחיקת ההקלטה נכשלה",
+  "Name is required":"שם הוא שדה חובה",
+  "Failed to add":"הוספה נכשלה",
+  "Save failed":"השמירה נכשלה",
+  "Saved ✓":"נשמר ✓",
+  "Prompt optimized ✓":"הפרומפט שופר ✓",
+  "Global prompt saved ✓":"הפרומפט הגלובלי נשמר ✓",
+  "Optimization failed":"שיפור הפרומפט נכשל",
+  "Enter prompt first":"הכנס פרומפט קודם",
+  "Select a restaurant first":"בחר מסעדה קודם",
+  "Voice requires HTTPS":"שיחת קול דורשת HTTPS",
+  "Voice session started":"שיחת קול התחילה",
+  "Voice session error":"שגיאה בשיחת קול",
+  "Start Voice Session":"התחל שיחת קול",
+  "End Voice Session":"סיים שיחת קול",
+  "Test Chat":"בדיקת צ'אט",
+  "Admins for this restaurant":"מנהלים למסעדה זו",
+  "Type a message to test the AI...":"הקלד הודעה כדי לבדוק את ה-AI...",
+  "Start a real-time voice session directly in your browser to test the AI receptionist.":"התחל שיחת קול בזמן אמת ישירות בדפדפן כדי לבדוק את נציג ה-AI.",
+  "Requires HTTPS and microphone permission.":"נדרש HTTPS ואישור מיקרופון.",
+  "Webhook URL — paste this into Twilio":"כתובת וובהוק — הדבק זאת ב-Twilio",
+  "Go to Twilio Console and set the Voice webhook to the URL above using HTTP POST.":"גש למסוף Twilio והגדר את וובהוק הקול לכתובת שמעל באמצעות HTTP POST.",
+  "URL copied ✓":"הקישור הועתק ✓",
+  "Copy failed":"ההעתקה נכשלה",
+  "Unauthorized":"אין הרשאה"
 };
 
 let lang = localStorage.getItem('ui_lang') || 'en';
+const textOriginals = new WeakMap();
+let i18nObserverInstalled = false;
+const normalizeI18nKey = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+const HE_NORM = Object.fromEntries(Object.entries(HE).map(([k, v]) => [normalizeI18nKey(k), v]));
 
-function t(k) { return lang === 'he' && HE[k] ? HE[k] : k; }
+function t(k) {
+  const s = String(k ?? '');
+  if (lang !== 'he') return s;
+  if (HE[s]) return HE[s];
+  const ns = normalizeI18nKey(s);
+  if (HE_NORM[ns]) return HE_NORM[ns];
+  if (/^Delete order #\d+\? This cannot be undone\.$/.test(s)) {
+    return s.replace(/^Delete order #(\d+)\? This cannot be undone\.$/, 'למחוק הזמנה #$1? לא ניתן לבטל.');
+  }
+  if (/^Delete recording from order #\d+\?$/.test(s)) {
+    return s.replace(/^Delete recording from order #(\d+)\?$/, 'למחוק הקלטה מהזמנה #$1?');
+  }
+  if (/^Mark order #\d+ as \"Completed by Admin\"\?$/.test(s)) {
+    return s.replace(/^Mark order #(\d+) as \"Completed by Admin\"\?$/, 'לסמן הזמנה #$1 כ"הושלם על ידי מנהל"?');
+  }
+  if (/^Order #\d+$/.test(s)) {
+    return s.replace(/^Order #(\d+)$/, 'הזמנה #$1');
+  }
+  return s;
+}
+
+function translateCoreText(core) {
+  return t(core);
+}
+
+function translateTextNode(node) {
+  if (!textOriginals.has(node)) textOriginals.set(node, node.nodeValue);
+  const original = textOriginals.get(node);
+  const m = String(original).match(/^(\s*)(.*?)(\s*)$/s);
+  if (!m) return;
+  node.nodeValue = `${m[1]}${translateCoreText(m[2])}${m[3]}`;
+}
+
+function translateAttributes(root) {
+  const nodes = root.querySelectorAll('[placeholder], [title], input[type=\"button\"], input[type=\"submit\"]');
+  for (const el of nodes) {
+    if (el.hasAttribute('placeholder')) {
+      const orig = el.dataset.i18nPlaceholder || el.getAttribute('placeholder') || '';
+      el.dataset.i18nPlaceholder = orig;
+      el.setAttribute('placeholder', translateCoreText(orig));
+    }
+    if (el.hasAttribute('title')) {
+      const orig = el.dataset.i18nTitle || el.getAttribute('title') || '';
+      el.dataset.i18nTitle = orig;
+      el.setAttribute('title', translateCoreText(orig));
+    }
+    if (el.tagName === 'INPUT' && (el.type === 'button' || el.type === 'submit')) {
+      const orig = el.dataset.i18nValue || el.value || '';
+      el.dataset.i18nValue = orig;
+      el.value = translateCoreText(orig);
+    }
+  }
+}
+
+function translateTree(root) {
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const tag = parent.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') continue;
+    if (!node.nodeValue || !node.nodeValue.trim()) continue;
+    nodes.push(node);
+  }
+  for (const n of nodes) translateTextNode(n);
+  if (root.querySelectorAll) translateAttributes(root);
+}
+
+function installI18nObserver() {
+  if (i18nObserverInstalled || !document.body) return;
+  i18nObserverInstalled = true;
+  const obs = new MutationObserver((mutations) => {
+    if (lang !== 'he') return;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) translateTree(node);
+        if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
+      }
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+}
 
 function setLang(l) {
   lang = l;
@@ -1646,6 +1895,8 @@ function setLang(l) {
     const tr = t(k);
     if (tr !== k || l === 'en') el.textContent = tr;
   });
+  translateTree(document.body);
+  installI18nObserver();
 }
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -1697,7 +1948,7 @@ async function api(path, opts = {}) {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 function showAuth(msg) {
   document.getElementById('authOverlay').classList.remove('hidden');
-  document.getElementById('authErr').textContent = msg || '';
+  document.getElementById('authErr').textContent = msg ? t(msg) : '';
 }
 
 function hideAuth() {
@@ -1777,7 +2028,7 @@ function toast(msg, type = 'ok') {
   clearTimeout(toastTimer);
   const el = document.getElementById('toast');
   el.className = `show ${type}`;
-  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastMsg').textContent = t(msg);
   toastTimer = setTimeout(() => { el.className = ''; }, 3200);
 }
 
@@ -1823,9 +2074,9 @@ function normalizeOrderStatus(s) {
 }
 
 function orderStatusLabel(s) {
-  if (s === ORDER_STATUS_PENDING) return 'Admin Review Pending';
-  if (s === ORDER_STATUS_DONE) return 'Completed by Admin';
-  return s || 'Unknown';
+  if (s === ORDER_STATUS_PENDING) return t('Admin Review Pending');
+  if (s === ORDER_STATUS_DONE) return t('Completed by Admin');
+  return t(s || 'Unknown');
 }
 
 function monospace(v) {
@@ -1885,7 +2136,7 @@ async function loadLogs() {
       <td>${monospace(fmtDur(l.duration))}</td>
       <td>${dim(l.created)}</td>
       <td>
-        <button class="btn btn-secondary btn-xs" onclick="openTranscriptModal(${Number(l.id)})" ${l.call_sid ? '' : 'disabled'}>View</button>
+        <button class="btn btn-secondary btn-xs" onclick="openTranscriptModal(${Number(l.id)})" ${l.call_sid ? '' : 'disabled'}>${t('View')}</button>
       </td>
     </tr>`;
     tbody.innerHTML  = logs.map(row).join('');
@@ -2030,7 +2281,7 @@ function renderReservationRow(o) {
     <td>${dim(o.created)}</td>
     <td>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
+        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">${t('Edit')}</button>
       </div>
     </td>
   </tr>`;
@@ -2067,7 +2318,7 @@ function renderFoodOrderRow(o) {
     <td>${dim(o.created)}</td>
     <td>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">Edit</button>
+        <button class="btn btn-secondary btn-xs" onclick="openOrderModal(${o.id})">${t('Edit')}</button>
       </div>
     </td>
   </tr>`;
@@ -2108,7 +2359,7 @@ function quickCompleteOrder(id) {
     return;
   }
   statusConfirmOrderId = Number(id);
-  document.getElementById('statusConfirmText').textContent = `Mark order #${id} as "Completed by Admin"?`;
+  document.getElementById('statusConfirmText').textContent = t(`Mark order #${id} as "Completed by Admin"?`);
   document.getElementById('statusConfirmOverlay').classList.remove('hidden');
 }
 
@@ -2178,14 +2429,14 @@ function setOrderRecordingBox(order) {
   const box = document.getElementById('orderRecordingBox');
   const rec = recUrl(order?.recording_url);
   if (!rec) {
-    box.innerHTML = `<span style="color:var(--text3)">No recording attached</span>`;
+    box.innerHTML = `<span style="color:var(--text3)">${t('No recording attached')}</span>`;
     return;
   }
   box.innerHTML = `
     <audio controls preload="none" src="${esc(rec)}" style="width:100%;max-width:340px;height:32px"></audio>
     <div class="btn-row" style="margin-top:10px">
-      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">Open File</a>
-      <button class="btn btn-danger btn-xs" onclick="deleteOrderRecordingFromModal()">Delete Recording</button>
+      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">${t('Open File')}</a>
+      <button class="btn btn-danger btn-xs" onclick="deleteOrderRecordingFromModal()">${t('Delete Recording')}</button>
     </div>`;
 }
 
@@ -2225,7 +2476,7 @@ async function saveOrderModal() {
 
 async function deleteOrderRecordingFromModal() {
   if (!editOrderId) return;
-  if (!confirm(`Delete recording from order #${editOrderId}?`)) return;
+  if (!confirm(t(`Delete recording from order #${editOrderId}?`))) return;
   try {
     const r = await api(`${API_BASE}/orders/${editOrderId}/recording`, { method:'DELETE' });
     if (!r.ok) throw new Error();
@@ -2241,7 +2492,7 @@ async function deleteOrderRecordingFromModal() {
 }
 
 async function deleteOrder(id) {
-  if (!confirm(`Delete order #${id}? This cannot be undone.`)) return false;
+  if (!confirm(t(`Delete order #${id}? This cannot be undone.`))) return false;
   try {
     const r = await api(`${API_BASE}/orders/${id}`, { method:'DELETE' });
     if (!r.ok) throw new Error();
@@ -2533,12 +2784,12 @@ async function updateR(id) {
 function renderOpeningAudioBoxHtml(r) {
   const rec = recUrl(r?.precall_notice_audio_url);
   if (!rec) {
-    return `<span style="color:var(--text3)">No opening audio uploaded</span>`;
+    return `<span style="color:var(--text3)">${t('No opening audio uploaded')}</span>`;
   }
   return `
     <audio controls preload="none" src="${esc(rec)}" style="width:100%;max-width:340px;height:32px"></audio>
     <div class="btn-row" style="margin-top:8px">
-      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">Open File</a>
+      <a class="btn btn-secondary btn-xs" href="${esc(rec)}" target="_blank" rel="noopener">${t('Open File')}</a>
     </div>`;
 }
 
@@ -2576,7 +2827,7 @@ async function uploadOpeningAudio(id) {
 }
 
 async function deleteOpeningAudio(id) {
-  if (!confirm('Delete opening audio?')) return;
+  if (!confirm(t('Delete opening audio?'))) return;
   try {
     const res = await api(`${API_BASE}/restaurants/${id}/opening-audio`, { method:'DELETE' });
     const data = await res.json().catch(() => ({}));
@@ -2602,7 +2853,7 @@ async function toggleR(id) {
 }
 
 async function deleteR(id) {
-  if (!confirm('Delete this restaurant? This cannot be undone.')) return;
+  if (!confirm(t('Delete this restaurant? This cannot be undone.'))) return;
   try {
     await api(`${API_BASE}/restaurants/${id}`, { method:'DELETE' });
     selId = null;
@@ -2611,7 +2862,7 @@ async function deleteR(id) {
     document.getElementById('rdetail').innerHTML = `
       <div class="card" style="text-align:center;padding:60px 24px">
         <div style="font-size:42px;margin-bottom:12px;opacity:.18">👆</div>
-        <div style="color:var(--text3);font-size:14px">Select a restaurant to manage it</div>
+        <div style="color:var(--text3);font-size:14px">${t('Select a restaurant to manage it')}</div>
       </div>`;
   } catch { toast('Delete failed', 'err'); }
 }
@@ -2660,31 +2911,31 @@ async function createOrAssignAdmin() {
 async function loadAdminsFor(rid) {
   const box = document.getElementById('adminList');
   if (!box) return;
-  box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">Loading...</div>`;
+  box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">${t('Loading...')}</div>`;
   try {
     const data = await (await api(`${API_BASE}/auth/users/by-restaurant/${rid}`)).json();
     uCache = data;
-    if (!data.length) { box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">No admins assigned yet</div>`; return; }
+    if (!data.length) { box.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:10px 0">${t('No admins assigned yet')}</div>`; return; }
     box.innerHTML = data.map(u => `
       <div class="admin-user-row">
         <div class="admin-user-info">
           <div class="admin-user-email">${esc(u.email)}</div>
-          <div class="admin-user-status">${u.active ? '● Active' : '○ Inactive'}</div>
+          <div class="admin-user-status">${u.active ? `● ${t('Active')}` : `○ ${t('Inactive')}`}</div>
         </div>
         <div class="admin-user-btns">
           <button class="btn btn-secondary btn-xs" onclick="openEditUser(${u.id})">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-            Edit
+            ${t('Edit')}
           </button>
           <button class="btn ${u.active ? 'btn-danger' : 'btn-success'} btn-xs" onclick="setUserStatus(${u.id},${!u.active})">
-            ${u.active ? 'Revoke' : 'Restore'}
+            ${u.active ? t('Revoke') : t('Restore')}
           </button>
           <button class="btn btn-danger btn-xs" onclick="deleteUser(${u.id})">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
         </div>
       </div>`).join('');
-  } catch { box.innerHTML = `<div style="color:var(--red);font-size:13px">Failed to load admins</div>`; }
+  } catch { box.innerHTML = `<div style="color:var(--red);font-size:13px">${t('Failed to load admins')}</div>`; }
 }
 
 function openEditUser(uid) {
@@ -2754,7 +3005,7 @@ async function saveEditUser() {
 }
 
 async function deleteUser(uid) {
-  if (!confirm('Delete this user? This cannot be undone.')) return;
+  if (!confirm(t('Delete this user? This cannot be undone.'))) return;
   try {
     const r = await api(`${API_BASE}/auth/users/${uid}`, { method:'DELETE' });
     if (!r.ok) throw new Error();
@@ -2792,7 +3043,7 @@ function copyTwilioUrl() {
 function setVoiceBtnState(on) {
   const b = document.getElementById('voiceBtn');
   if (!b) return;
-  b.textContent = on ? '⏹ End Voice Session' : '🎙️ Start Voice Session';
+  b.textContent = on ? `⏹ ${t('End Voice Session')}` : `🎙️ ${t('Start Voice Session')}`;
   b.classList.toggle('active', on);
   b.disabled = false;
 }
@@ -2873,53 +3124,53 @@ function openR(id, silent) {
     <div class="card">
       <div class="card-head">
         <div class="card-icon">🍽️</div>
-        <div class="card-title">${esc(r.name||'Unnamed')}</div>
+        <div class="card-title">${esc(r.name||t('Unnamed'))}</div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
-          <span class="badge ${active?'badge-green':'badge-red'}">${active?'Active':'Inactive'}</span>
+          <span class="badge ${active?'badge-green':'badge-red'}">${active ? t('Active') : t('Inactive')}</span>
           ${admin ? `
-          <button class="btn btn-secondary btn-sm" onclick="toggleR(${r.id})">${active?'⏸ Deactivate':'▶ Activate'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleR(${r.id})">${active ? `⏸ ${t('Deactivate')}` : `▶ ${t('Activate')}`}</button>
           <button class="btn btn-danger btn-sm" onclick="deleteR(${r.id})">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-            Delete
+            ${t('Delete')}
           </button>` : ''}
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Name</label>
-          <input id="rn-${r.id}" value="${esc(r.name||'')}" placeholder="Restaurant Name">
+          <label class="form-label">${t('Name')}</label>
+          <input id="rn-${r.id}" value="${esc(r.name||'')}" placeholder="${esc(t('Restaurant Name'))}">
         </div>
         <div class="form-group">
-          <label class="form-label">Phone</label>
+          <label class="form-label">${t('Phone')}</label>
           <input id="rp-${r.id}" value="${esc(r.phone||'')}" placeholder="+1 (555) 000-0000">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">IVR Prompt</label>
+        <label class="form-label">${t('IVR Prompt')}</label>
         <div class="prompt-tools">
-          <button type="button" class="prompt-tag" data-opt-target="rpr-${r.id}" onclick="optimizePromptField('rpr-${r.id}', this)">Optimize</button>
+          <button type="button" class="prompt-tag" data-opt-target="rpr-${r.id}" onclick="optimizePromptField('rpr-${r.id}', this)">${t('Optimize')}</button>
         </div>
         <textarea id="rpr-${r.id}">${esc(r.ivr_text||'')}</textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">Pre-call Notice</label>
-        <textarea id="rnt-${r.id}" placeholder="Optional opening message before AI starts">${esc(r.precall_notice_text||'')}</textarea>
+        <label class="form-label">${t('Pre-call Notice')}</label>
+        <textarea id="rnt-${r.id}" placeholder="${esc(t('Optional opening message before AI starts (e.g., call recording notice).'))}">${esc(r.precall_notice_text||'')}</textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">Opening Audio (Upload Recording)</label>
+        <label class="form-label">${t('Opening Audio (Upload Recording)')}</label>
         <div class="order-recording-box" id="r-audio-box-${r.id}">
           ${renderOpeningAudioBoxHtml(r)}
         </div>
         <div class="btn-row" style="margin-top:10px;align-items:center;gap:8px;flex-wrap:wrap">
           <input id="r-audio-file-${r.id}" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" style="max-width:280px">
-          <button class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">Upload Audio</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">Remove Audio</button>
+          <button class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">${t('Upload Audio')}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">${t('Remove Audio')}</button>
         </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" onclick="updateR(${r.id})">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
-          Save Changes
+          ${t('Save Changes')}
         </button>
       </div>
     </div>
@@ -2927,49 +3178,47 @@ function openR(id, silent) {
     <div class="card">
       <div class="card-head">
         <div class="card-icon">💬</div>
-        <div class="card-title">Test Chat</div>
+        <div class="card-title">${t('Test Chat')}</div>
       </div>
       <div class="chat-box" id="chat"></div>
       <div class="chat-row">
-        <input id="chatIn" placeholder="Type a message to test the AI..." onkeydown="if(event.key==='Enter')sendChat()">
-        <button class="btn btn-primary btn-sm" onclick="sendChat()">Send</button>
+        <input id="chatIn" placeholder="${esc(t('Type a message to test the AI...'))}" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary btn-sm" onclick="sendChat()">${t('Send')}</button>
       </div>
     </div>
 
     ${admin ? `
     <div class="card">
-      <div class="section-lbl">Admins for this restaurant</div>
+      <div class="section-lbl">${t('Admins for this restaurant')}</div>
       <div id="adminList"></div>
     </div>` : ''}
 
     <div class="card">
       <div class="card-head">
         <div class="card-icon">🎙️</div>
-        <div class="card-title">Voice Test</div>
+        <div class="card-title">${t('Voice Test')}</div>
       </div>
       <p style="font-size:13.5px;color:var(--text2);margin-bottom:10px;line-height:1.6">
-        Start a real-time voice session directly in your browser to test the AI receptionist.
-        Requires HTTPS and microphone permission.
+        ${t('Start a real-time voice session directly in your browser to test the AI receptionist.')}
+        ${t('Requires HTTPS and microphone permission.')}
       </p>
-      <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎙️ Start Voice Session</button>
+      <button class="voice-btn" id="voiceBtn" onclick="startVoice()">🎙️ ${t('Start Voice Session')}</button>
     </div>
 
     <div class="card">
       <div class="card-head">
         <div class="card-icon">📡</div>
-        <div class="card-title">Twilio Webhook</div>
+        <div class="card-title">${t('Twilio Webhook')}</div>
       </div>
       <div class="form-group">
-        <label class="form-label">Webhook URL — paste this into Twilio</label>
+        <label class="form-label">${t('Webhook URL — paste this into Twilio')}</label>
         <div class="twilio-row">
           <input id="twilioUrl" readonly value="${esc(buildTwilioUrl(r.id))}">
-          <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">Copy</button>
+          <button class="btn btn-secondary btn-sm" onclick="copyTwilioUrl()">${t('Copy')}</button>
         </div>
       </div>
       <p style="font-size:12.5px;color:var(--text3);line-height:1.7;margin-top:10px">
-        Go to <strong style="color:var(--text2)">Twilio Console → Phone Numbers → Active Numbers</strong>,
-        select your number, set <em>Voice → A Call Comes In</em> to <strong style="color:var(--text2)">Webhook</strong>,
-        paste the URL above, and save with <strong style="color:var(--text2)">HTTP POST</strong>.
+        ${t('Go to Twilio Console and set the Voice webhook to the URL above using HTTP POST.')}
       </p>
     </div>
   `;
