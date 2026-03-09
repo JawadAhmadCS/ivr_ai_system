@@ -53,7 +53,7 @@ VOICE                             = os.getenv("VOICE", "alloy")
 LOG_LEVEL                         = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
 REALTIME_LOG_EVERY_EVENT          = _env_bool("REALTIME_LOG_EVERY_EVENT", False)
 
-TURN_DETECTION_THRESHOLD          = float(os.getenv("TURN_DETECTION_THRESHOLD", 1))
+TURN_DETECTION_THRESHOLD          = float(os.getenv("TURN_DETECTION_THRESHOLD", 0.5))
 TURN_DETECTION_SILENCE_MS         = int(os.getenv("TURN_DETECTION_SILENCE_MS", 600))
 TURN_DETECTION_PREFIX_MS          = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
 TURN_DETECTION_CREATE_RESPONSE    = _env_bool("TURN_DETECTION_CREATE_RESPONSE", True)
@@ -1432,6 +1432,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             last_assistant_item = None
             response_active     = False
             response_cancelling = False
+            latest_media_ts_ms  = 0
+            response_start_ts_ms = None
+            pending_marks: list[str] = []
+            mark_counter        = 0
             start_ts            = None
             logged              = False
 
@@ -1463,6 +1467,19 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     await websocket.send_json(msg)
                 except Exception as e:
                     logger.debug("[TWI-SEND] %s", e)
+
+            async def send_mark():
+                nonlocal mark_counter
+                if not stream_sid:
+                    return
+                mark_counter += 1
+                name = f"assistant-{mark_counter}"
+                pending_marks.append(name)
+                await twi({
+                    "event": "mark",
+                    "streamSid": stream_sid,
+                    "mark": {"name": name},
+                })
 
             def add_transcript_line(speaker: str, content: str):
                 sp = str(speaker or "").strip().lower()
@@ -1531,8 +1548,39 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                 if stream_sid:
                     await twi({"event": "clear", "streamSid": stream_sid})
 
+            async def interrupt_assistant():
+                nonlocal response_active, response_cancelling, last_assistant_item
+                nonlocal response_start_ts_ms
+                if response_cancelling:
+                    return
+                played_ms = None
+                if response_start_ts_ms is not None:
+                    played_ms = max(0, latest_media_ts_ms - response_start_ts_ms)
+                response_cancelling = True
+                response_active     = False
+                logger.info(
+                    "[CALL] Interrupting item=%s played_ms=%s pending_marks=%s",
+                    last_assistant_item,
+                    played_ms,
+                    len(pending_marks),
+                )
+                if last_assistant_item and played_ms is not None:
+                    await oai({
+                        "type": "conversation.item.truncate",
+                        "item_id": last_assistant_item,
+                        "content_index": 0,
+                        "audio_end_ms": int(played_ms),
+                    })
+                await oai({"type": "response.cancel"})
+                if stream_sid:
+                    await twi({"event": "clear", "streamSid": stream_sid})
+                pending_marks.clear()
+                response_start_ts_ms = None
+                last_assistant_item = None
+
             async def receive_twilio():
-                nonlocal stream_sid, start_ts, call_sid, recording_sid
+                nonlocal stream_sid, start_ts, call_sid, recording_sid, latest_media_ts_ms
+                nonlocal response_active, response_start_ts_ms, last_assistant_item
                 try:
                     async for message in websocket.iter_text():
                         ev    = json.loads(message)
@@ -1554,10 +1602,28 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             await oai({"type": "response.create"})
 
                         elif etype == "media":
+                            media = ev.get("media") or {}
+                            try:
+                                latest_media_ts_ms = max(
+                                    latest_media_ts_ms,
+                                    int(media.get("timestamp") or 0),
+                                )
+                            except (TypeError, ValueError):
+                                pass
                             await oai({
                                 "type":  "input_audio_buffer.append",
-                                "audio": ev["media"]["payload"],
+                                "audio": media["payload"],
                             })
+
+                        elif etype == "mark":
+                            name = str((ev.get("mark") or {}).get("name") or "")
+                            if name in pending_marks:
+                                pending_marks.remove(name)
+                            elif pending_marks:
+                                pending_marks.pop(0)
+                            if not pending_marks and not response_active:
+                                response_start_ts_ms = None
+                                last_assistant_item = None
 
                         elif etype == "stop":
                             logger.info("[CALL] ■ Stream stopped  sid=%s", stream_sid)
@@ -1587,7 +1653,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
-                nonlocal full_text
+                nonlocal response_start_ts_ms, full_text
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -1621,7 +1687,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                 )
                         response_active     = False
                         response_cancelling = False
-                        last_assistant_item = None
+                        if not pending_marks:
+                            last_assistant_item = None
+                            response_start_ts_ms = None
 
                     elif etype == "error":
                         err  = ev.get("error") or {}
@@ -1646,12 +1714,18 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             full_text = full_text[-30_000:]
                         if chunk.strip():
                             logger.info("[MODEL-TEXT] %s", chunk)
+                    if etype == "input_audio_buffer.speech_started" and (response_active or pending_marks):
+                        logger.info("[CALL] User speech detected during assistant audio")
+                        await interrupt_assistant()
+                        continue
 
                     # ── Check for ORDER_JSON inline ──────────────────────────
                     if not order_saved and ORDER_JSON_MARKER in full_text:
                         parsed = parse_order_json(full_text)
                         if parsed:
                             try_save_from_payload(parsed, "inline-marker")
+                    if etype == "input_audio_buffer.speech_started":
+                        continue
 
                     # Interrupt assistant whenever caller starts speaking.
                     if etype == "input_audio_buffer.speech_started":
@@ -1659,18 +1733,25 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         await interrupt()
 
                     elif etype == "input_audio_buffer.speech_stopped":
-                        if not response_active and not response_cancelling:
+                        if (
+                            not TURN_DETECTION_CREATE_RESPONSE
+                            and not response_active
+                            and not response_cancelling
+                        ):
                             await oai({"type": "response.create"})
                             response_active = True
 
                     if etype in {"response.output_audio.delta", "response.audio.delta"}:
                         audio = ev.get("delta")
                         if isinstance(audio, str) and stream_sid:
+                            if response_start_ts_ms is None:
+                                response_start_ts_ms = latest_media_ts_ms
                             await twi({
                                 "event":     "media",
                                 "streamSid": stream_sid,
                                 "media":     {"payload": audio},
                             })
+                            await send_mark()
                         if ev.get("item_id"):
                             last_assistant_item = ev["item_id"]
                             response_active     = True
