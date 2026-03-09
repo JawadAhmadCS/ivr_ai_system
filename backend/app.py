@@ -571,6 +571,13 @@ def attach_recording_to_latest_order(
 
 def start_twilio_recording(call_sid: str) -> str | None:
     if not ENABLE_TWILIO_RECORDING or not call_sid or not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        logger.warning(
+            "[TWILIO] Recording skipped enabled=%s call_sid=%s account_sid_present=%s auth_token_present=%s",
+            ENABLE_TWILIO_RECORDING,
+            bool(call_sid),
+            bool(TWILIO_ACCOUNT_SID),
+            bool(TWILIO_AUTH_TOKEN),
+        )
         return None
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     try:
@@ -589,8 +596,18 @@ def start_twilio_recording(call_sid: str) -> str | None:
 
 def download_twilio_recording(recording_sid: str) -> str | None:
     if not recording_sid or not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        logger.warning(
+            "[TWILIO] Download skipped recording_sid=%s account_sid_present=%s auth_token_present=%s",
+            bool(recording_sid),
+            bool(TWILIO_ACCOUNT_SID),
+            bool(TWILIO_AUTH_TOKEN),
+        )
         return None
-    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.warning("[TWILIO] Could not create recordings dir %s: %s", RECORDINGS_DIR, exc)
+        return None
 
     api_url = (
         f"https://api.twilio.com/2010-04-01/Accounts/"
@@ -604,7 +621,11 @@ def download_twilio_recording(recording_sid: str) -> str | None:
             r = requests.get(api_url, auth=auth, timeout=30)
             if r.status_code == 200 and r.content:
                 out = RECORDINGS_DIR / f"{recording_sid}.wav"
-                out.write_bytes(r.content)
+                try:
+                    out.write_bytes(r.content)
+                except Exception as exc:
+                    logger.warning("[TWILIO] Could not write recording file %s: %s", out, exc)
+                    return None
                 return f"/api/recordings/{out.name}"
             if r.status_code in (202, 204, 404):
                 time.sleep(max(0.1, RECORDING_FETCH_SLEEP_SEC))
