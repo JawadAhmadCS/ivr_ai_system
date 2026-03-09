@@ -1072,16 +1072,7 @@ table.tbl {
 .items-cell {
   display:flex;
   align-items:center;
-  gap:8px;
-  max-width:320px;
-}
-
-.items-preview {
-  min-width:0;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  display:block;
+  justify-content:center;
 }
 
 .items-eye-btn {
@@ -3062,25 +3053,32 @@ function truncateItemsPreview(text, maxLen = 42) {
   return `${clean.slice(0, maxLen - 1).trimEnd()}…`;
 }
 
-function shouldUseItemsModal(itemsText, rawItems) {
-  const clean = String(itemsText || '').trim();
-  return (Array.isArray(rawItems) && rawItems.length > 2) || clean.length > 42;
+function fallbackItemsFromText(text) {
+  const clean = String(text || '').trim();
+  if (!clean) return [];
+  return clean
+    .split(/\s*\|\s*/)
+    .map(part => String(part || '').trim())
+    .filter(Boolean)
+    .map((part, idx) => {
+      const match = part.match(/^(\d+)\s*x\s+(.+)$/i);
+      if (match) {
+        return { item_name: match[2].trim(), quantity: Number(match[1]) || 1 };
+      }
+      return { item_name: part, quantity: 1, fallback_index: idx + 1 };
+    });
 }
 
 function renderItemsCell(orderId, itemsText, rawItems) {
   const clean = String(itemsText || '').trim();
-  if (!clean) return monospace('-');
-  const useModal = shouldUseItemsModal(clean, rawItems);
-  const preview = useModal ? truncateItemsPreview(clean) : clean;
-  const eyeBtn = useModal
-    ? `<button class="items-eye-btn" onclick="openItemsModal(${orderId})" title="View items" aria-label="View items">
-         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-           <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"></path>
-           <circle cx="12" cy="12" r="3"></circle>
-         </svg>
-       </button>`
-    : '';
-  return `<div class="items-cell"><span class="items-preview">${monospace(preview)}</span>${eyeBtn}</div>`;
+  if (!clean && !(Array.isArray(rawItems) && rawItems.length)) return `<div class="items-cell">-</div>`;
+  const eyeBtn = `<button class="items-eye-btn" onclick="openItemsModal(${orderId})" title="View items" aria-label="View items">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </button>`;
+  return `<div class="items-cell">${eyeBtn}</div>`;
 }
 
 function getOrderViewMeta(order) {
@@ -3180,12 +3178,14 @@ function openItemsModal(id) {
   if (!o) { toast('Order not found', 'err'); return; }
 
   const { rawCustomer, rawItems } = getOrderViewMeta(o);
-  const items = Array.isArray(rawItems) ? rawItems : [];
+  const items = Array.isArray(rawItems) && rawItems.length
+    ? rawItems
+    : fallbackItemsFromText(o.ordered_items);
   const customer = String(rawCustomer?.full_name ?? '').trim() || o.full_name || 'Unknown customer';
   const fallbackSummary = summarizeOrderedItems(items) || o.ordered_items || '';
 
   document.getElementById('itemsModalSub').textContent = `${o.restaurant || 'Restaurant'} • ${customer} • Order #${o.id}`;
-  document.getElementById('itemsModalCount').textContent = `${items.length || 1} ${items.length === 1 ? 'Item' : 'Items'}`;
+  document.getElementById('itemsModalCount').textContent = `${items.length} ${items.length === 1 ? 'Item' : 'Items'}`;
 
   const list = document.getElementById('itemsList');
   if (items.length) {

@@ -1457,6 +1457,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             response_cancelling = False
             latest_media_ts_ms  = 0
             response_start_ts_ms = None
+            response_audio_sent = False
             pending_marks: list[str] = []
             mark_counter        = 0
             start_ts            = None
@@ -1676,7 +1677,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
 
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
-                nonlocal response_start_ts_ms, full_text
+                nonlocal response_start_ts_ms, response_audio_sent, full_text
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -1692,6 +1693,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if etype == "response.created":
                         response_active     = True
                         response_cancelling = False
+                        response_audio_sent = False
 
                     elif etype in {"response.done", "response.cancelled"}:
                         if etype == "response.done":
@@ -1708,11 +1710,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                     call_sid=call_sid,
                                     meta={"source": "twilio_stream"},
                                 )
+                            if response_audio_sent and stream_sid and not pending_marks:
+                                await send_mark()
                         response_active     = False
                         response_cancelling = False
                         if not pending_marks:
                             last_assistant_item = None
                             response_start_ts_ms = None
+                        response_audio_sent = False
 
                     elif etype == "error":
                         err  = ev.get("error") or {}
@@ -1769,12 +1774,12 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         if isinstance(audio, str) and stream_sid:
                             if response_start_ts_ms is None:
                                 response_start_ts_ms = latest_media_ts_ms
+                            response_audio_sent = True
                             await twi({
                                 "event":     "media",
                                 "streamSid": stream_sid,
                                 "media":     {"payload": audio},
                             })
-                            await send_mark()
                         if ev.get("item_id"):
                             last_assistant_item = ev["item_id"]
                             response_active     = True
