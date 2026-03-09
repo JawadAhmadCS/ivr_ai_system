@@ -2266,6 +2266,30 @@ async function api(path, opts = {}) {
   return r;
 }
 
+async function responseErrorMessage(r, fallback = 'Request failed') {
+  try {
+    const clone = r.clone();
+    const contentType = clone.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body = await clone.json().catch(() => null);
+      if (body?.detail) return String(body.detail);
+      if (body?.error?.message) return String(body.error.message);
+      if (body?.message) return String(body.message);
+    }
+    const text = (await clone.text().catch(() => '')).trim();
+    if (!text) return fallback;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.detail) return String(parsed.detail);
+      if (parsed?.error?.message) return String(parsed.error.message);
+      if (parsed?.message) return String(parsed.message);
+    } catch {}
+    return text.slice(0, 300);
+  } catch {
+    return fallback;
+  }
+}
+
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 function showAuth(msg) {
   document.getElementById('authOverlay').classList.remove('hidden');
@@ -3703,11 +3727,13 @@ async function startVoice() {
   const btn = document.getElementById('voiceBtn');
   if (btn) btn.disabled = true;
   try {
-    const session = await (await api(`${API_BASE}/voice-session`, {
+    const sessionRes = await api(`${API_BASE}/voice-session`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ restaurant_prompt:prompt })
-    })).json();
-    if (!session.client_secret?.value) { toast('Voice session error', 'err'); return; }
+    });
+    if (!sessionRes.ok) throw new Error(await responseErrorMessage(sessionRes, 'Voice session error'));
+    const session = await sessionRes.json();
+    if (!session.client_secret?.value) throw new Error('OpenAI returned no client_secret');
 
     const pc = new RTCPeerConnection();
     const dc = pc.createDataChannel('oai-events');
@@ -3727,9 +3753,9 @@ async function startVoice() {
       method:'POST', body:offer.sdp,
       headers:{ Authorization:`Bearer ${session.client_secret.value}`, 'Content-Type':'application/sdp' }
     });
-    if (!sdpRes.ok) throw new Error('sdp failed');
+    if (!sdpRes.ok) throw new Error(await responseErrorMessage(sdpRes, 'OpenAI realtime SDP failed'));
     const sdp = await sdpRes.text();
-    if (!sdp) throw new Error('empty sdp');
+    if (!sdp) throw new Error('OpenAI returned empty SDP');
     await pc.setRemoteDescription({ type:'answer', sdp });
 
     vs = { pc, stream, audio, dc, on:true };
@@ -3739,7 +3765,7 @@ async function startVoice() {
     };
     setVoiceBtnState(true);
     toast('Voice session started');
-  } catch { stopVoice(); toast('Voice session error', 'err'); }
+  } catch (e) { stopVoice(); toast(e?.message || 'Voice session error', 'err'); }
   finally { document.getElementById('voiceBtn')?.removeAttribute('disabled'); }
 }
 
@@ -3879,11 +3905,12 @@ async function sendChat() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ message:msg, restaurant_prompt:prompt })
     });
+    if (!r.ok) throw new Error(await responseErrorMessage(r, 'Chat request failed'));
     const d = await r.json();
-    if (!r.ok || !d.reply) throw new Error();
+    if (!d.reply) throw new Error('OpenAI returned an empty reply');
     document.getElementById(tid).outerHTML = `<div class="msg ai"><div class="msg-sender">AI</div><div class="msg-bubble">${esc(d.reply)}</div></div>`;
-  } catch {
-    document.getElementById(tid).outerHTML = `<div class="msg ai"><div class="msg-sender">AI</div><div class="msg-bubble" style="color:var(--red)">Server error — please try again</div></div>`;
+  } catch (e) {
+    document.getElementById(tid).outerHTML = `<div class="msg ai"><div class="msg-sender">AI</div><div class="msg-bubble" style="color:var(--red)">${esc(e?.message || 'Server error')}</div></div>`;
   }
   chat.scrollTop = chat.scrollHeight;
 }

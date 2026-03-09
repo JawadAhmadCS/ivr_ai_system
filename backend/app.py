@@ -627,8 +627,19 @@ def log_openai_status(ctx: str, ok: bool, detail: str = ""):
 def extract_openai_error(body, fallback: str = "") -> str:
     if isinstance(body, dict):
         err = body.get("error")
-        if isinstance(err, dict) and err.get("message"):
-            return str(err["message"])
+        if isinstance(err, dict):
+            message = str(err.get("message") or "").strip()
+            meta: list[str] = []
+            if err.get("type"):
+                meta.append(f"type={err['type']}")
+            if err.get("code"):
+                meta.append(f"code={err['code']}")
+            if err.get("param"):
+                meta.append(f"param={err['param']}")
+            if message and meta:
+                return f"{message} ({', '.join(meta)})"
+            if message:
+                return message
     return fallback[:300] if fallback else "Unknown error"
 
 
@@ -1236,6 +1247,9 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
     restaurant_id = data.get("restaurant_id")
     r_prompt      = data.get("restaurant_prompt")
 
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not configured")
+
     if not user.is_admin:
         if not user.restaurant_id:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -1248,21 +1262,24 @@ async def chat_with_ai(data: dict, user=Depends(require_auth)):
         except (TypeError, ValueError):
             pass
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": final_prompt},
-                    {"role": "user",   "content": data.get("message", "")},
-                ],
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": final_prompt},
+                        {"role": "user",   "content": data.get("message", "")},
+                    ],
+                },
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc}") from exc
 
     body = {}
     try:
@@ -1332,6 +1349,9 @@ async def create_voice_session(request: Request, user=Depends(require_auth)):
     except Exception:
         data = {}
 
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not configured")
+
     restaurant_id = data.get("restaurant_id") or request.query_params.get("restaurant_id")
     r_prompt      = data.get("restaurant_prompt")
 
@@ -1347,19 +1367,22 @@ async def create_voice_session(request: Request, user=Depends(require_auth)):
         except (TypeError, ValueError):
             pass
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(
-            "https://api.openai.com/v1/realtime/sessions",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "model":        REALTIME_MODEL,
-                "voice":        VOICE,
-                "instructions": final_prompt,
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model":        REALTIME_MODEL,
+                    "voice":        VOICE,
+                    "instructions": final_prompt,
+                },
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc}") from exc
 
     body = {}
     try:
