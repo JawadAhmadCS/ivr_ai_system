@@ -32,7 +32,7 @@
 
   --text:      #e6edf3;
   --text2:     #c9d1d9;
-  --text3:     #8b949e;
+  --text3:     #ffffff;
 
   --sidebar:   220px;
   --sidebar-sm:68px;
@@ -1069,6 +1069,140 @@ table.tbl {
   padding:12px;
 }
 
+.items-cell {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  max-width:320px;
+}
+
+.items-preview {
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  display:block;
+}
+
+.items-eye-btn {
+  width:30px;
+  height:30px;
+  padding:0;
+  border:none;
+  border-radius:999px;
+  background:linear-gradient(135deg, rgba(88,166,255,.18), rgba(88,166,255,.08));
+  color:#fff;
+  cursor:pointer;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 10px 24px rgba(15,23,42,.28);
+  transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.items-eye-btn:hover {
+  transform:translateY(-1px);
+  background:linear-gradient(135deg, rgba(88,166,255,.26), rgba(88,166,255,.14));
+  box-shadow:0 14px 30px rgba(37,99,235,.24);
+}
+
+.items-eye-btn svg {
+  width:15px;
+  height:15px;
+  stroke:currentColor;
+}
+
+.items-modal-card {
+  width:min(640px,94vw);
+  max-height:86vh;
+  overflow:auto;
+  padding:28px;
+  background:
+    radial-gradient(circle at top right, rgba(88,166,255,.12), transparent 34%),
+    linear-gradient(180deg, rgba(33,38,45,.96), rgba(22,27,34,.98));
+}
+
+.items-modal-top {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:18px;
+}
+
+.items-modal-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:5px 10px;
+  border-radius:999px;
+  background:rgba(88,166,255,.12);
+  border:1px solid rgba(88,166,255,.22);
+  color:#dbeafe;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.4px;
+  text-transform:uppercase;
+}
+
+.items-list {
+  display:grid;
+  gap:12px;
+}
+
+.items-list-empty {
+  padding:18px;
+  border:1px dashed var(--border2);
+  border-radius:var(--radius-sm);
+  background:rgba(255,255,255,.02);
+  color:var(--text2);
+  font-size:13.5px;
+}
+
+.items-row {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:15px 16px;
+  border-radius:16px;
+  border:1px solid rgba(148,163,184,.14);
+  background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+}
+
+.items-row-main {
+  min-width:0;
+}
+
+.items-row-name {
+  font-size:15px;
+  font-weight:700;
+  color:#fff;
+  line-height:1.35;
+}
+
+.items-row-sub {
+  margin-top:6px;
+  color:var(--text2);
+  font-size:12.5px;
+  line-height:1.5;
+}
+
+.items-row-qty {
+  min-width:72px;
+  padding:8px 10px;
+  border-radius:12px;
+  text-align:center;
+  background:rgba(88,166,255,.12);
+  border:1px solid rgba(88,166,255,.22);
+  color:#fff;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  letter-spacing:.5px;
+  text-transform:uppercase;
+}
+
 .transcript-modal-card {
   width:min(860px,96vw);
   max-height:88vh;
@@ -1403,6 +1537,25 @@ table.tbl {
         <button class="btn btn-secondary btn-sm" onclick="closeOrderModal()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveOrderModal()">Save Changes</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Items Modal -->
+<div id="itemsOverlay" class="modal-overlay hidden" onclick="if(event.target===this) closeItemsModal()">
+  <div class="modal-card items-modal-card">
+    <div class="items-modal-top">
+      <div>
+        <div class="modal-title">Order Items</div>
+        <div class="modal-sub" id="itemsModalSub">Complete item list for this order</div>
+      </div>
+      <div class="items-modal-chip" id="itemsModalCount">0 Items</div>
+    </div>
+    <div id="itemsList" class="items-list">
+      <div class="items-list-empty">No items available.</div>
+    </div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn btn-secondary btn-sm" onclick="closeItemsModal()">Close</button>
     </div>
   </div>
 </div>
@@ -2903,6 +3056,33 @@ function summarizeOrderedItems(items) {
   return parts.join(' | ');
 }
 
+function truncateItemsPreview(text, maxLen = 42) {
+  const clean = String(text || '').trim();
+  if (!clean || clean.length <= maxLen) return clean;
+  return `${clean.slice(0, maxLen - 1).trimEnd()}…`;
+}
+
+function shouldUseItemsModal(itemsText, rawItems) {
+  const clean = String(itemsText || '').trim();
+  return (Array.isArray(rawItems) && rawItems.length > 2) || clean.length > 42;
+}
+
+function renderItemsCell(orderId, itemsText, rawItems) {
+  const clean = String(itemsText || '').trim();
+  if (!clean) return monospace('-');
+  const useModal = shouldUseItemsModal(clean, rawItems);
+  const preview = useModal ? truncateItemsPreview(clean) : clean;
+  const eyeBtn = useModal
+    ? `<button class="items-eye-btn" onclick="openItemsModal(${orderId})" title="View items" aria-label="View items">
+         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+           <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"></path>
+           <circle cx="12" cy="12" r="3"></circle>
+         </svg>
+       </button>`
+    : '';
+  return `<div class="items-cell"><span class="items-preview">${monospace(preview)}</span>${eyeBtn}</div>`;
+}
+
 function getOrderViewMeta(order) {
   const raw = parseJsonSafe(order.raw_json);
   const rawCustomer = raw && typeof raw.customer === 'object' ? raw.customer : null;
@@ -2950,6 +3130,7 @@ function renderFoodOrderRow(o) {
   const deliveryType = String(raw?.delivery_type ?? '').trim() || '-';
   const deliveryAddress = formatDeliveryAddress(raw?.delivery_address) || '-';
   const items = summarizeOrderedItems(rawItems) || o.ordered_items || '';
+  const itemsCell = renderItemsCell(o.id, items, rawItems);
   const contact = String(rawCustomer?.contact_number ?? '').trim() || o.caller || '';
   const payment = String(raw?.payment_method ?? '').trim() || o.contact_number || o.payment_method || '';
   const statusNorm = normalizeOrderStatus(o.status);
@@ -2967,7 +3148,7 @@ function renderFoodOrderRow(o) {
     <td>${monospace(customer)}</td>
     <td>${monospace(deliveryType)}</td>
     <td>${monospace(deliveryAddress)}</td>
-    <td>${monospace(items)}</td>
+    <td>${itemsCell}</td>
     <td>${monospace(contact)}</td>
     <td>${monospace(payment)}</td>
     <td>${recCell}</td>
@@ -2989,6 +3170,44 @@ function renderOrdersTable(tbody, rows, emptyText, colspan, rowRenderer, emptyIc
   }
   tbody.innerHTML = rows.map(rowRenderer).join('');
 }
+
+function closeItemsModal() {
+  document.getElementById('itemsOverlay').classList.add('hidden');
+}
+
+function openItemsModal(id) {
+  const o = oCache.find(x => Number(x.id) === Number(id));
+  if (!o) { toast('Order not found', 'err'); return; }
+
+  const { rawCustomer, rawItems } = getOrderViewMeta(o);
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const customer = String(rawCustomer?.full_name ?? '').trim() || o.full_name || 'Unknown customer';
+  const fallbackSummary = summarizeOrderedItems(items) || o.ordered_items || '';
+
+  document.getElementById('itemsModalSub').textContent = `${o.restaurant || 'Restaurant'} • ${customer} • Order #${o.id}`;
+  document.getElementById('itemsModalCount').textContent = `${items.length || 1} ${items.length === 1 ? 'Item' : 'Items'}`;
+
+  const list = document.getElementById('itemsList');
+  if (items.length) {
+    list.innerHTML = items.map((item, idx) => {
+      const name = String(item?.item_name ?? item?.name ?? `Item ${idx + 1}`).trim() || `Item ${idx + 1}`;
+      const qty = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+      return `
+        <div class="items-row">
+          <div class="items-row-main">
+            <div class="items-row-name">${esc(name)}</div>
+            <div class="items-row-sub">Added from the captured phone order</div>
+          </div>
+          <div class="items-row-qty">${esc(`${Math.max(qty, 1)}x`)}</div>
+        </div>`;
+    }).join('');
+  } else {
+    list.innerHTML = `<div class="items-list-empty">${esc(fallbackSummary || 'No items available.')}</div>`;
+  }
+
+  document.getElementById('itemsOverlay').classList.remove('hidden');
+}
+
 async function loadOrders() {
   try {
     const orders = await (await api(`${API_BASE}/orders/`)).json();
