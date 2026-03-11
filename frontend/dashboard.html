@@ -2192,6 +2192,17 @@ const HE = {
   "Upload Audio":"העלה אודיו",
   "Remove Audio":"הסר אודיו",
   "Opening Audio (Upload Recording)":"אודיו פתיחה (העלאת הקלטה)",
+  "Opening Audio (Upload or Record)":"אודיו פתיחה (העלאה או הקלטה)",
+  "Record Message":"הקלט הודעה",
+  "Stop & Save":"עצור ושמור",
+  "Ready to record":"מוכן להקלטה",
+  "Recording in progress...":"מקליט...",
+  "Recording started":"ההקלטה התחילה",
+  "Opening audio recorded ✓":"אודיו פתיחה הוקלט ✓",
+  "Previous recording canceled":"ההקלטה הקודמת בוטלה",
+  "No audio captured. Try again.":"לא נקלט אודיו. נסה שוב.",
+  "Browser does not support microphone recording":"הדפדפן לא תומך בהקלטת מיקרופון",
+  "Microphone access denied or unavailable":"הגישה למיקרופון נדחתה או אינה זמינה",
   "Send":"שלח",
   "Delete":"מחק",
   "Delete Order":"מחק הזמנה",
@@ -2395,6 +2406,16 @@ const ORDER_STATUS_DONE = 'admin_completed';
 let oc = { buf:'', tail:'', done:false };
 
 let vs = { pc:null, stream:null, audio:null, dc:null, on:false };
+let openingAudioRec = {
+  restaurantId: null,
+  stream: null,
+  audioContext: null,
+  sourceNode: null,
+  processorNode: null,
+  chunks: [],
+  sampleRate: 44100,
+  isRecording: false
+};
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
@@ -3657,6 +3678,221 @@ async function updateR(id) {
   } catch { toast('Save failed', 'err'); }
 }
 
+function openingAudioStateFor(id) {
+  return openingAudioRec.isRecording && Number(openingAudioRec.restaurantId) === Number(id);
+}
+
+function cleanupOpeningAudioRecorder() {
+  const rec = openingAudioRec;
+  if (rec.processorNode) {
+    try { rec.processorNode.disconnect(); } catch {}
+  }
+  if (rec.sourceNode) {
+    try { rec.sourceNode.disconnect(); } catch {}
+  }
+  if (rec.stream) {
+    rec.stream.getTracks().forEach(track => {
+      try { track.stop(); } catch {}
+    });
+  }
+  if (rec.audioContext && typeof rec.audioContext.close === 'function') {
+    rec.audioContext.close().catch(() => {});
+  }
+
+  openingAudioRec = {
+    restaurantId: null,
+    stream: null,
+    audioContext: null,
+    sourceNode: null,
+    processorNode: null,
+    chunks: [],
+    sampleRate: 44100,
+    isRecording: false
+  };
+}
+
+function setOpeningAudioRecordUi(id) {
+  const active = openingAudioStateFor(id);
+  const startBtn = document.getElementById(`r-audio-rec-start-${id}`);
+  const stopBtn = document.getElementById(`r-audio-rec-stop-${id}`);
+  const status = document.getElementById(`r-audio-rec-status-${id}`);
+  const fileInput = document.getElementById(`r-audio-file-${id}`);
+  const uploadBtn = document.getElementById(`r-audio-upload-btn-${id}`);
+  const deleteBtn = document.getElementById(`r-audio-delete-btn-${id}`);
+
+  if (startBtn) startBtn.disabled = active;
+  if (stopBtn) stopBtn.disabled = !active;
+  if (fileInput) fileInput.disabled = active;
+  if (uploadBtn) uploadBtn.disabled = active;
+  if (deleteBtn) deleteBtn.disabled = active;
+
+  if (status) {
+    status.textContent = active ? t('Recording in progress...') : t('Ready to record');
+    status.style.color = active ? 'var(--red)' : 'var(--text3)';
+  }
+}
+
+function writeWavAscii(view, offset, value) {
+  for (let i = 0; i < value.length; i++) {
+    view.setUint8(offset + i, value.charCodeAt(i));
+  }
+}
+
+function wavBlobFromFloatChunks(chunks, sampleRate) {
+  if (!Array.isArray(chunks) || !chunks.length) {
+    return new Blob([], { type: 'audio/wav' });
+  }
+
+  let sampleCount = 0;
+  for (const chunk of chunks) {
+    sampleCount += chunk.length || 0;
+  }
+
+  const samples = new Float32Array(sampleCount);
+  let writeAt = 0;
+  for (const chunk of chunks) {
+    samples.set(chunk, writeAt);
+    writeAt += chunk.length || 0;
+  }
+
+  const bytesPerSample = 2;
+  const dataSize = samples.length * bytesPerSample;
+  const wav = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wav);
+
+  writeWavAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeWavAscii(view, 8, 'WAVE');
+  writeWavAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeWavAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += bytesPerSample;
+  }
+
+  return new Blob([wav], { type: 'audio/wav' });
+}
+
+async function uploadOpeningAudioFile(id, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await api(`${API_BASE}/restaurants/${id}/opening-audio`, {
+    method: 'POST',
+    body: fd
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+  const r = rCache.find(x => x.id === id);
+  if (r) r.precall_notice_audio_url = data.precall_notice_audio_url || '';
+  refreshOpeningAudioBox(id);
+  return data;
+}
+
+async function startOpeningAudioRecording(id) {
+  if (openingAudioRec.isRecording) {
+    if (openingAudioStateFor(id)) return;
+    cleanupOpeningAudioRecorder();
+    toast(t('Previous recording canceled'));
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast(t('Browser does not support microphone recording'), 'err');
+    return;
+  }
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) {
+    toast(t('Browser does not support microphone recording'), 'err');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioContext = new AudioCtx();
+    if (typeof audioContext.createScriptProcessor !== 'function') {
+      stream.getTracks().forEach(track => track.stop());
+      if (typeof audioContext.close === 'function') audioContext.close().catch(() => {});
+      toast(t('Browser does not support microphone recording'), 'err');
+      return;
+    }
+
+    const sourceNode = audioContext.createMediaStreamSource(stream);
+    const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+
+    processorNode.onaudioprocess = event => {
+      if (!openingAudioRec.isRecording) return;
+      const input = event.inputBuffer.getChannelData(0);
+      chunks.push(new Float32Array(input));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+
+    openingAudioRec = {
+      restaurantId: id,
+      stream,
+      audioContext,
+      sourceNode,
+      processorNode,
+      chunks,
+      sampleRate: audioContext.sampleRate || 44100,
+      isRecording: true
+    };
+    setOpeningAudioRecordUi(id);
+    toast(t('Recording started'));
+  } catch {
+    toast(t('Microphone access denied or unavailable'), 'err');
+  }
+}
+
+async function stopOpeningAudioRecording(id) {
+  if (!openingAudioStateFor(id)) return;
+
+  const rec = openingAudioRec;
+  cleanupOpeningAudioRecorder();
+  setOpeningAudioRecordUi(id);
+
+  if (!Array.isArray(rec.chunks) || !rec.chunks.length) {
+    toast(t('No audio captured. Try again.'), 'err');
+    return;
+  }
+
+  const wavBlob = wavBlobFromFloatChunks(rec.chunks, rec.sampleRate);
+  if (!wavBlob.size) {
+    toast(t('No audio captured. Try again.'), 'err');
+    return;
+  }
+
+  const file = new File(
+    [wavBlob],
+    `opening_${id}_${Date.now()}.wav`,
+    { type: 'audio/wav' }
+  );
+
+  try {
+    await uploadOpeningAudioFile(id, file);
+    const input = document.getElementById(`r-audio-file-${id}`);
+    if (input) input.value = '';
+    toast(t('Opening audio recorded ✓'));
+  } catch (e) {
+    toast(e.message || 'Upload failed', 'err');
+  }
+}
+
 function renderOpeningAudioBoxHtml(r) {
   const rec = recUrl(r?.precall_notice_audio_url);
   if (!rec) {
@@ -3681,21 +3917,9 @@ async function uploadOpeningAudio(id) {
   const file = input?.files?.[0];
   if (!file) { toast('Select an audio file first', 'err'); return; }
 
-  const fd = new FormData();
-  fd.append('file', file);
-
   try {
-    const res = await api(`${API_BASE}/restaurants/${id}/opening-audio`, {
-      method: 'POST',
-      body: fd
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Upload failed');
-
-    const r = rCache.find(x => x.id === id);
-    if (r) r.precall_notice_audio_url = data.precall_notice_audio_url || '';
+    await uploadOpeningAudioFile(id, file);
     if (input) input.value = '';
-    refreshOpeningAudioBox(id);
     toast('Opening audio uploaded ✓');
   } catch (e) {
     toast(e.message || 'Upload failed', 'err');
@@ -3990,6 +4214,10 @@ async function startVoice() {
 
 // ─── RESTAURANT DETAIL ───────────────────────────────────────────────────────
 function openR(id, silent) {
+  if (openingAudioRec.isRecording && Number(openingAudioRec.restaurantId) !== Number(id)) {
+    cleanupOpeningAudioRecorder();
+    toast(t('Previous recording canceled'));
+  }
   selId = id;
   const r = rCache.find(x => x.id===id);
   if (!r) return;
@@ -4035,14 +4263,19 @@ function openR(id, silent) {
         <textarea id="rnt-${r.id}" placeholder="${esc(t('Optional opening message before AI starts (e.g., call recording notice).'))}">${esc(r.precall_notice_text||'')}</textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">${t('Opening Audio (Upload Recording)')}</label>
+        <label class="form-label">${t('Opening Audio (Upload or Record)')}</label>
         <div class="order-recording-box" id="r-audio-box-${r.id}">
           ${renderOpeningAudioBoxHtml(r)}
         </div>
         <div class="btn-row" style="margin-top:10px;align-items:center;gap:8px;flex-wrap:wrap">
           <input id="r-audio-file-${r.id}" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" style="max-width:280px">
-          <button class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">${t('Upload Audio')}</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">${t('Remove Audio')}</button>
+          <button id="r-audio-upload-btn-${r.id}" class="btn btn-secondary btn-sm" onclick="uploadOpeningAudio(${r.id})">${t('Upload Audio')}</button>
+          <button id="r-audio-delete-btn-${r.id}" class="btn btn-danger btn-sm" onclick="deleteOpeningAudio(${r.id})">${t('Remove Audio')}</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px;align-items:center;gap:8px;flex-wrap:wrap">
+          <button id="r-audio-rec-start-${r.id}" class="btn btn-secondary btn-sm" onclick="startOpeningAudioRecording(${r.id})">${t('Record Message')}</button>
+          <button id="r-audio-rec-stop-${r.id}" class="btn btn-primary btn-sm" onclick="stopOpeningAudioRecording(${r.id})" disabled>${t('Stop & Save')}</button>
+          <span id="r-audio-rec-status-${r.id}" style="font-size:12px;color:var(--text3)">${t('Ready to record')}</span>
         </div>
       </div>
       <div class="btn-row">
@@ -4102,6 +4335,7 @@ function openR(id, silent) {
   `;
 
   setVoiceBtnState(vs.on);
+  setOpeningAudioRecordUi(r.id);
   if (admin) loadAdminsFor(r.id);
   if (!silent) loadRestaurants();
 }
