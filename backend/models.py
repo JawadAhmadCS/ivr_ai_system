@@ -51,6 +51,7 @@ class Order(Base):
     house_number = Column(String(50))
     ordered_items = Column(Text)
     payment_method = Column(String(50))
+    card_no = Column(String(64), nullable=True)
     status = Column(String(50), default="pending_admin_review")
     raw_json = Column(Text)
     recording_sid = Column(String(100), nullable=True)

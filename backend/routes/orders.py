@@ -36,6 +36,7 @@ def _serialize_order(o: models.Order) -> dict:
         "house_number": o.house_number,
         "ordered_items": o.ordered_items,
         "payment_method": o.payment_method,
+        "card_no": o.card_no,
         "raw_json": o.raw_json,
         "status": o.status,
         "recording_sid": o.recording_sid,
@@ -58,7 +59,8 @@ def _parse_raw_json(raw: str | None) -> dict:
 def _is_food_order_row(order: models.Order) -> bool:
     raw = _parse_raw_json(order.raw_json)
     return any(
-        key in raw for key in ("customer", "ordered_items", "delivery_type", "delivery_address", "payment_method")
+        key in raw
+        for key in ("customer", "ordered_items", "delivery_type", "delivery_address", "payment_method", "card_no")
     )
 
 

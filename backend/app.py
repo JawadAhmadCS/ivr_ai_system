@@ -334,6 +334,11 @@ def save_order(
                 house_number=str(normalized.get("delivery_type") or "").strip(),
                 ordered_items=json.dumps(ordered_items, ensure_ascii=False),
                 payment_method=str(normalized.get("payment_method") or "").strip(),
+                card_no=(
+                    str(normalized.get("card_no") or "").strip() or None
+                    if _is_card_payment_method(normalized.get("payment_method"))
+                    else None
+                ),
                 status="pending_admin_review",
                 raw_json=raw_json,
                 recording_sid=recording_sid,
@@ -351,6 +356,7 @@ def save_order(
                 house_number=normalized["time_arrival"],
                 ordered_items=str(normalized["total_peoples"]),
                 payment_method=normalized["contact_number"],
+                card_no=None,
                 status="pending_admin_review",
                 raw_json=raw_json,
                 recording_sid=recording_sid,
@@ -763,6 +769,28 @@ def _normalize_delivery_address(value) -> dict:
     }
 
 
+def _is_card_payment_method(value: str | None) -> bool:
+    method = _clean(value).lower().replace("_", " ").replace("-", " ")
+    if not method:
+        return False
+    return (
+        method == "card"
+        or "credit" in method
+        or "debit" in method
+        or "card" in method
+    )
+
+
+def _mask_card_number(value) -> str:
+    text = _clean(value)
+    if not text:
+        return ""
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 4:
+        return f"****{digits[-4:]}"
+    return text
+
+
 def _normalize_reservation_payload(data: dict) -> tuple[dict, list[str]]:
     full_name = _clean(_pick(data, "full_name", "fullName", "name", "customer_name"))
     date_arrival = _clean(_pick(data, "date-arrival", "date_arrival", "arrival_date"))
@@ -807,6 +835,10 @@ def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
 
     order_type = _clean(_pick(data, "order_type", "orderType", "type")) or "order"
     payment_method = _clean(_pick(data, "payment_method", "paymentMethod", "payment"))
+    card_no_raw = _clean(
+        _pick(data, "card_no", "cardNo", "card_number", "cardNumber", "card")
+    )
+    card_no = _mask_card_number(card_no_raw)
     delivery_type = _clean(_pick(data, "delivery_type", "deliveryType", "service_type"))
     delivery_type = delivery_type or None
 
@@ -822,6 +854,8 @@ def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
         missing.append("customer.contact_number")
     if not payment_method:
         missing.append("payment_method")
+    if _is_card_payment_method(payment_method) and not card_no_raw:
+        missing.append("card_no")
     if not ordered_items:
         missing.append("ordered_items")
 
@@ -831,6 +865,7 @@ def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
         "full_name": full_name,
         "contact_number": contact_number,
         "payment_method": payment_method,
+        "card_no": card_no if _is_card_payment_method(payment_method) else "",
         "delivery_type": delivery_type,
         "delivery_address": delivery_address,
         "ordered_items": ordered_items,
@@ -842,7 +877,15 @@ def normalize_order_payload(data: dict) -> tuple[dict, list[str]]:
         return {}, ["invalid_payload"]
 
     is_food_order_shape = any(
-        key in data for key in ("customer", "ordered_items", "delivery_type", "delivery_address", "payment_method")
+        key in data
+        for key in (
+            "customer",
+            "ordered_items",
+            "delivery_type",
+            "delivery_address",
+            "payment_method",
+            "card_no",
+        )
     )
     if is_food_order_shape:
         return _normalize_food_order_payload(data)
@@ -878,6 +921,11 @@ def build_order_json_payload(normalized: dict) -> dict:
             if isinstance(normalized.get("ordered_items"), list)
             else [],
             "payment_method": str(normalized.get("payment_method") or ""),
+            "card_no": (
+                str(normalized.get("card_no") or "")
+                if _is_card_payment_method(normalized.get("payment_method"))
+                else ""
+            ),
         }
 
     return {
@@ -962,12 +1010,13 @@ Choose exactly one schema:
 ORDER_JSON: {"order_type":"reservation","full_name":"...","date-arrival":"YYYY-MM-DD","time_arrival":"HH:MM","total_peoples":0,"contact_number":"..."}
 
 2) Food order schema:
-ORDER_JSON: {"order_type":"type","customer":{"full_name":"...","contact_number":"..."},"delivery_type":"...","delivery_address":{"city":"...","street":"...","house_number":"..."},"ordered_items":[{"item_name":"...","quantity":"..."}],"payment_method":"..."}
+ORDER_JSON: {"order_type":"type","customer":{"full_name":"...","contact_number":"..."},"delivery_type":"...","delivery_address":{"city":"...","street":"...","house_number":"..."},"ordered_items":[{"item_name":"...","quantity":"..."}],"payment_method":"...","card_no":"****1234"}
 
 Rules:
 - No explanation, no markdown
 - Use only one schema based on conversation intent
 - quantity and total_peoples must be numbers
+- If payment_method is card/credit/debit, include card_no (masked preferred, e.g., ****1234)
 - If unknown: use empty strings for required text, null for optional delivery fields, and [] for ordered_items"""
 
     try:
