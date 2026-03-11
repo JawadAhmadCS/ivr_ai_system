@@ -781,16 +781,6 @@ def _is_card_payment_method(value: str | None) -> bool:
     )
 
 
-def _mask_card_number(value) -> str:
-    text = _clean(value)
-    if not text:
-        return ""
-    digits = "".join(ch for ch in text if ch.isdigit())
-    if len(digits) >= 4:
-        return f"****{digits[-4:]}"
-    return text
-
-
 def _normalize_reservation_payload(data: dict) -> tuple[dict, list[str]]:
     full_name = _clean(_pick(data, "full_name", "fullName", "name", "customer_name"))
     date_arrival = _clean(_pick(data, "date-arrival", "date_arrival", "arrival_date"))
@@ -838,7 +828,6 @@ def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
     card_no_raw = _clean(
         _pick(data, "card_no", "cardNo", "card_number", "cardNumber", "card")
     )
-    card_no = _mask_card_number(card_no_raw)
     delivery_type = _clean(_pick(data, "delivery_type", "deliveryType", "service_type"))
     delivery_type = delivery_type or None
 
@@ -865,7 +854,7 @@ def _normalize_food_order_payload(data: dict) -> tuple[dict, list[str]]:
         "full_name": full_name,
         "contact_number": contact_number,
         "payment_method": payment_method,
-        "card_no": card_no if _is_card_payment_method(payment_method) else "",
+        "card_no": card_no_raw if _is_card_payment_method(payment_method) else "",
         "delivery_type": delivery_type,
         "delivery_address": delivery_address,
         "ordered_items": ordered_items,
@@ -1010,13 +999,13 @@ Choose exactly one schema:
 ORDER_JSON: {"order_type":"reservation","full_name":"...","date-arrival":"YYYY-MM-DD","time_arrival":"HH:MM","total_peoples":0,"contact_number":"..."}
 
 2) Food order schema:
-ORDER_JSON: {"order_type":"type","customer":{"full_name":"...","contact_number":"..."},"delivery_type":"...","delivery_address":{"city":"...","street":"...","house_number":"..."},"ordered_items":[{"item_name":"...","quantity":"..."}],"payment_method":"...","card_no":"****1234"}
+ORDER_JSON: {"order_type":"type","customer":{"full_name":"...","contact_number":"..."},"delivery_type":"...","delivery_address":{"city":"...","street":"...","house_number":"..."},"ordered_items":[{"item_name":"...","quantity":"..."}],"payment_method":"...","card_no":"4242 4242 4242 4242"}
 
 Rules:
 - No explanation, no markdown
 - Use only one schema based on conversation intent
 - quantity and total_peoples must be numbers
-- If payment_method is card/credit/debit, include card_no (masked preferred, e.g., ****1234)
+- If payment_method is card/credit/debit, include card_no exactly as spoken/captured (no masking)
 - If unknown: use empty strings for required text, null for optional delivery fields, and [] for ordered_items"""
 
     try:
