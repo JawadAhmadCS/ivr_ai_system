@@ -1507,6 +1507,17 @@ table.tbl {
 
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">Payment</label>
+        <input id="orderEditPayment" placeholder="card / cash" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Card Number</label>
+        <input id="orderEditCardNo" placeholder="****1234" readonly>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
         <label class="form-label">Status</label>
         <select id="orderEditStatus">
           <option value="pending_admin_review">Admin Review Pending</option>
@@ -1893,11 +1904,11 @@ table.tbl {
         <table class="tbl">
           <thead><tr>
             <th>#</th><th>Restaurant</th><th>Customer</th>
-            <th>Delivery Type</th><th>Address</th><th>Items</th><th>Phone</th><th>Payment</th>
+            <th>Delivery Type</th><th>Address</th><th>Items</th><th>Phone</th><th>Payment</th><th>Card No</th>
             <th>Recording</th><th>Status</th><th>Created</th><th>Actions</th>
           </tr></thead>
           <tbody id="foodOrderTable">
-            <tr><td colspan="12"><div class="empty"><div class="empty-icon">🛒</div><div class="empty-text">No food orders yet</div></div></td></tr>
+            <tr><td colspan="13"><div class="empty"><div class="empty-icon">🛒</div><div class="empty-text">No food orders yet</div></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -2218,6 +2229,8 @@ const HE = {
   "Arrival Date":"תאריך הגעה",
   "Arrival Time":"שעת הגעה",
   "Contact Number":"מספר קשר",
+  "Card Number":"מספר כרטיס",
+  "Card No":"כרטיס",
   "No recording attached":"אין הקלטה מצורפת",
   "Call Transcript":"תמלול שיחה",
   "User and assistant utterances captured during the call":"דברי המשתמש והעוזר שנקלטו במהלך השיחה",
@@ -3152,6 +3165,7 @@ function renderFoodOrderRow(o) {
   const itemsCell = renderItemsCell(o.id, items, rawItems);
   const contact = String(rawCustomer?.contact_number ?? '').trim() || o.caller || '';
   const payment = String(raw?.payment_method ?? '').trim() || o.contact_number || o.payment_method || '';
+  const cardNo = String(o.card_no ?? raw?.card_no ?? '').trim() || '-';
   const statusNorm = normalizeOrderStatus(o.status);
   const canQuickDone = !!me?.is_admin && statusNorm === ORDER_STATUS_PENDING;
   const statusCell = canQuickDone
@@ -3170,6 +3184,7 @@ function renderFoodOrderRow(o) {
     <td>${itemsCell}</td>
     <td>${monospace(contact)}</td>
     <td>${monospace(payment)}</td>
+    <td>${monospace(cardNo)}</td>
     <td>${recCell}</td>
     <td>${statusCell}</td>
     <td>${dim(o.created)}</td>
@@ -3243,7 +3258,7 @@ async function loadOrders() {
       else reservations.push(o);
     }
     renderOrdersTable(reservationTable, reservations, 'No reservations yet', 11, renderReservationRow, '📅');
-    renderOrdersTable(foodOrderTable, foodOrders, 'No food orders yet', 12, renderFoodOrderRow, '🛒');
+    renderOrdersTable(foodOrderTable, foodOrders, 'No food orders yet', 13, renderFoodOrderRow, '🛒');
   } catch {}
 }
 
@@ -3309,6 +3324,12 @@ function openOrderModal(id) {
   document.getElementById('orderEditPhone').value = isFoodOrder
     ? (String(rawCustomer?.contact_number ?? '').trim() || o.caller || '')
     : (o.contact_number || o.payment_method || '');
+  document.getElementById('orderEditPayment').value = isFoodOrder
+    ? (String(raw?.payment_method ?? '').trim() || o.payment_method || '')
+    : '';
+  document.getElementById('orderEditCardNo').value = isFoodOrder
+    ? (String(o.card_no ?? raw?.card_no ?? '').trim() || '')
+    : '';
   document.getElementById('orderEditStatus').value = normalizeOrderStatus(o.status);
   document.getElementById('orderEditErr').textContent = '';
   setOrderRecordingBox(o);
