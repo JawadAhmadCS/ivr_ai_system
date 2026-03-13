@@ -1737,6 +1737,25 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
                 nonlocal response_start_ts_ms, response_audio_sent, full_text
+                vad_fallback_task: asyncio.Task | None = None
+                awaiting_vad_response = False
+
+                def cancel_vad_fallback():
+                    nonlocal vad_fallback_task
+                    if vad_fallback_task and not vad_fallback_task.done():
+                        vad_fallback_task.cancel()
+                    vad_fallback_task = None
+
+                async def schedule_vad_fallback():
+                    await asyncio.sleep(0.9)
+                    if (
+                        TURN_DETECTION_CREATE_RESPONSE
+                        and awaiting_vad_response
+                        and not response_active
+                        and not response_cancelling
+                    ):
+                        logger.info("[CALL] VAD fallback -> response.create")
+                        await oai({"type": "response.create"})
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -1750,11 +1769,15 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         logger.info("[OAI-EVENT] %s", etype)
 
                     if etype == "response.created":
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
                         response_active     = True
                         response_cancelling = False
                         response_audio_sent = False
 
                     elif etype in {"response.done", "response.cancelled"}:
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
                         if etype == "response.done":
                             for assistant_line in assistant_transcripts_from_response_done(ev):
                                 add_transcript_line("assistant", assistant_line)
@@ -1779,6 +1802,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         response_audio_sent = False
 
                     elif etype == "error":
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
                         err  = ev.get("error") or {}
                         code = err.get("code", "")
                         if code in (
@@ -1788,7 +1813,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         ):
                             response_cancelling = False
                             continue
-                        logger.error("[OAI] ❌ %s: %s", code, err.get("message", ""))
+                        logger.error("[OAI] error %s: %s", code, err.get("message", ""))
                         continue
 
                     # Accumulate all text
@@ -1801,23 +1826,24 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             full_text = full_text[-30_000:]
                         if chunk.strip():
                             logger.info("[MODEL-TEXT] %s", chunk)
+
                     if etype == "input_audio_buffer.speech_started" and (response_active or pending_marks):
                         logger.info("[CALL] User speech detected during assistant audio")
                         await interrupt_assistant()
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
                         continue
 
-                    # ── Check for ORDER_JSON inline ──────────────────────────
+                    # Check for ORDER_JSON inline
                     if not order_saved and ORDER_JSON_MARKER in full_text:
                         parsed = parse_order_json(full_text)
                         if parsed:
                             try_save_from_payload(parsed, "inline-marker")
-                    if etype == "input_audio_buffer.speech_started":
-                        continue
 
-                    # Interrupt assistant whenever caller starts speaking.
                     if etype == "input_audio_buffer.speech_started":
-                        logger.info("[CALL] 🗣 Interrupting")
-                        await interrupt()
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
+                        continue
 
                     elif etype == "input_audio_buffer.speech_stopped":
                         if (
@@ -1827,8 +1853,14 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         ):
                             await oai({"type": "response.create"})
                             response_active = True
+                        elif TURN_DETECTION_CREATE_RESPONSE:
+                            awaiting_vad_response = True
+                            cancel_vad_fallback()
+                            vad_fallback_task = asyncio.create_task(schedule_vad_fallback())
 
                     if etype in {"response.output_audio.delta", "response.audio.delta"}:
+                        awaiting_vad_response = False
+                        cancel_vad_fallback()
                         audio = ev.get("delta")
                         if isinstance(audio, str) and stream_sid:
                             if response_start_ts_ms is None:
@@ -1843,6 +1875,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             last_assistant_item = ev["item_id"]
                             response_active     = True
 
+                cancel_vad_fallback()
             try:
                 await asyncio.gather(receive_twilio(), send_twilio())
             finally:
