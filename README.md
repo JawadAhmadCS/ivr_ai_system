@@ -84,6 +84,11 @@ Recovery keys behavior:
 ### Frontend start command
 
 ```bash
+cd /opt/ivr_ai_system
+ssh root@72.61.113.148
+```
+
+```bash
 cd /opt/ivr_ai_system/frontend
 nohup python3 -m http.server 8080 --bind 0.0.0.0 > frontend.log 2>&1 &
 ```
