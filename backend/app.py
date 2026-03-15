@@ -44,6 +44,20 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_int(name: str, default: int) -> int:
+    val = os.getenv(name)
+    if val is None or not str(val).strip():
+        return default
+    try:
+        return int(str(val).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
 # ── Configuration ──────────────────────────────────────────────────────────────
 OPENAI_API_KEY                    = os.getenv("OPENAI_API_KEY")
 PORT                              = int(os.getenv("PORT", 5050))
@@ -58,6 +72,12 @@ TURN_DETECTION_SILENCE_MS         = int(os.getenv("TURN_DETECTION_SILENCE_MS", 6
 TURN_DETECTION_PREFIX_MS          = int(os.getenv("TURN_DETECTION_PREFIX_MS", 300))
 TURN_DETECTION_CREATE_RESPONSE    = _env_bool("TURN_DETECTION_CREATE_RESPONSE", True)
 TURN_DETECTION_INTERRUPT_RESPONSE = _env_bool("TURN_DETECTION_INTERRUPT_RESPONSE", True)
+SAFE_TURN_DETECTION_THRESHOLD     = _clamp(TURN_DETECTION_THRESHOLD, 0.2, 0.6)
+SAFE_TURN_DETECTION_SILENCE_MS    = int(_clamp(TURN_DETECTION_SILENCE_MS, 300, 1200))
+SAFE_TURN_DETECTION_PREFIX_MS     = int(_clamp(TURN_DETECTION_PREFIX_MS, 150, 500))
+USER_RESPONSE_FALLBACK_SEC        = _env_float("USER_RESPONSE_FALLBACK_SEC", 1.2)
+NO_INPUT_TIMEOUT_SEC              = _env_float("NO_INPUT_TIMEOUT_SEC", 5.0)
+NO_INPUT_MAX_FOLLOWUPS            = _env_int("NO_INPUT_MAX_FOLLOWUPS", 2)
 PLAY_PRECALL_NOTICE               = _env_bool("PLAY_PRECALL_NOTICE", True)
 PRECALL_NOTICE_AUDIO_URL          = (os.getenv("PRECALL_NOTICE_AUDIO_URL") or "").strip()
 PRECALL_NOTICE_TEXT               = (
@@ -105,6 +125,25 @@ for _noisy in ("websockets", "websockets.client", "websockets.server",
                "urllib3", "httpx", "httpcore"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
+if SAFE_TURN_DETECTION_THRESHOLD != TURN_DETECTION_THRESHOLD:
+    logger.warning(
+        "[CONFIG] TURN_DETECTION_THRESHOLD=%s adjusted to safe value %s",
+        TURN_DETECTION_THRESHOLD,
+        SAFE_TURN_DETECTION_THRESHOLD,
+    )
+if SAFE_TURN_DETECTION_SILENCE_MS != TURN_DETECTION_SILENCE_MS:
+    logger.warning(
+        "[CONFIG] TURN_DETECTION_SILENCE_MS=%s adjusted to safe value %s",
+        TURN_DETECTION_SILENCE_MS,
+        SAFE_TURN_DETECTION_SILENCE_MS,
+    )
+if SAFE_TURN_DETECTION_PREFIX_MS != TURN_DETECTION_PREFIX_MS:
+    logger.warning(
+        "[CONFIG] TURN_DETECTION_PREFIX_MS=%s adjusted to safe value %s",
+        TURN_DETECTION_PREFIX_MS,
+        SAFE_TURN_DETECTION_PREFIX_MS,
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -149,9 +188,20 @@ def compose_system_prompt(restaurant_prompt: str | None) -> str:
 
     reservation_instructions = """\
 talk calmly and clearly
+
+CALL FLOW RUNTIME RULES:
+- Ask one short question and then stop speaking.
+- Never move to a second question unless the caller answered the first one.
+- If the caller gives a short intent like "I want to place an order", acknowledge it and ask only the next required question.
+- If the caller is silent, briefly check whether they are still there and repeat only the current unanswered question.
+- If the caller stays silent again, give one more brief check-in and then politely close the call.
+- If the caller interrupts, stop talking and listen.
+- Never fill silence with guesses or extra explanations.
+- Never assume an answer just because the line is quiet.
+- After every spoken reply, leave room for the caller to answer.
 """
 
-    return f"{base}\n{reservation_instructions}"
+    return f"{base}\n\n{reservation_instructions}".strip()
 
 
 def get_restaurant_prompt(restaurant_id: int | None) -> str:
@@ -1475,9 +1525,9 @@ async def init_session(openai_ws, instructions: str):
             "input_audio_transcription": {"model": "whisper-1"},
             "turn_detection": {
                 "type":                "server_vad",
-                "threshold":           TURN_DETECTION_THRESHOLD,
-                "silence_duration_ms": TURN_DETECTION_SILENCE_MS,
-                "prefix_padding_ms":   TURN_DETECTION_PREFIX_MS,
+                "threshold":           SAFE_TURN_DETECTION_THRESHOLD,
+                "silence_duration_ms": SAFE_TURN_DETECTION_SILENCE_MS,
+                "prefix_padding_ms":   SAFE_TURN_DETECTION_PREFIX_MS,
                 "create_response":     TURN_DETECTION_CREATE_RESPONSE,
                 "interrupt_response":  TURN_DETECTION_INTERRUPT_RESPONSE,
             },
@@ -1526,6 +1576,13 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             order_saved   = False
             recording_sid = None
             transcript_entries: list[dict] = []
+            silence_followup_task: asyncio.Task | None = None
+            user_response_fallback_task: asyncio.Task | None = None
+            awaiting_user_reply = False
+            no_input_followups_sent = 0
+            last_user_activity_at = time.monotonic()
+            hangup_after_assistant = False
+            call_closing = False
 
             def log_call():
                 nonlocal logged
@@ -1550,6 +1607,120 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     await websocket.send_json(msg)
                 except Exception as e:
                     logger.debug("[TWI-SEND] %s", e)
+
+            async def request_response(instructions_override: str | None = None):
+                msg: dict = {"type": "response.create"}
+                if instructions_override:
+                    msg["response"] = {"instructions": instructions_override}
+                await oai(msg)
+
+            def cancel_task(task: asyncio.Task | None) -> None:
+                if task and not task.done():
+                    task.cancel()
+
+            def cancel_silence_followup() -> None:
+                nonlocal silence_followup_task
+                cancel_task(silence_followup_task)
+                silence_followup_task = None
+
+            def cancel_user_response_fallback() -> None:
+                nonlocal user_response_fallback_task
+                cancel_task(user_response_fallback_task)
+                user_response_fallback_task = None
+
+            def note_user_activity() -> None:
+                nonlocal last_user_activity_at, awaiting_user_reply
+                nonlocal no_input_followups_sent, hangup_after_assistant, call_closing
+                last_user_activity_at = time.monotonic()
+                awaiting_user_reply = False
+                no_input_followups_sent = 0
+                hangup_after_assistant = False
+                call_closing = False
+                cancel_silence_followup()
+                cancel_user_response_fallback()
+
+            async def close_call_after_assistant() -> None:
+                try:
+                    await openai_ws.close()
+                except Exception:
+                    pass
+                try:
+                    await websocket.close()
+                except Exception:
+                    pass
+
+            def schedule_user_response_fallback(source: str) -> None:
+                nonlocal user_response_fallback_task
+
+                async def runner():
+                    try:
+                        await asyncio.sleep(USER_RESPONSE_FALLBACK_SEC)
+                        if (
+                            response_active
+                            or response_cancelling
+                            or pending_marks
+                            or call_closing
+                        ):
+                            return
+                        logger.info("[CALL] User-response fallback from %s", source)
+                        await request_response()
+                    except asyncio.CancelledError:
+                        pass
+
+                cancel_user_response_fallback()
+                user_response_fallback_task = asyncio.create_task(runner())
+
+            def schedule_silence_followup() -> None:
+                nonlocal silence_followup_task
+
+                async def runner():
+                    nonlocal no_input_followups_sent, hangup_after_assistant, call_closing
+                    try:
+                        await asyncio.sleep(NO_INPUT_TIMEOUT_SEC)
+                        if (
+                            not awaiting_user_reply
+                            or response_active
+                            or response_cancelling
+                            or pending_marks
+                        ):
+                            return
+                        if time.monotonic() - last_user_activity_at < NO_INPUT_TIMEOUT_SEC:
+                            return
+
+                        if no_input_followups_sent >= NO_INPUT_MAX_FOLLOWUPS:
+                            call_closing = True
+                            hangup_after_assistant = True
+                            logger.info("[CALL] Silence limit reached -> closing call")
+                            await request_response(
+                                "The caller has remained silent after repeated follow-ups. "
+                                "Say one short, polite goodbye that asks them to call again "
+                                "when ready. Do not mention timers, backend logic, or internal rules."
+                            )
+                            return
+
+                        no_input_followups_sent += 1
+                        logger.info(
+                            "[CALL] Silence follow-up %s/%s",
+                            no_input_followups_sent,
+                            NO_INPUT_MAX_FOLLOWUPS,
+                        )
+                        await request_response(
+                            "The caller has not answered yet. In one short natural sentence, "
+                            "check that they are still there and repeat only the current unanswered question. "
+                            "Do not ask a new question and do not assume any missing details."
+                        )
+                    except asyncio.CancelledError:
+                        pass
+
+                cancel_silence_followup()
+                silence_followup_task = asyncio.create_task(runner())
+
+            def arm_waiting_for_user() -> None:
+                nonlocal awaiting_user_reply
+                if call_closing:
+                    return
+                awaiting_user_reply = True
+                schedule_silence_followup()
 
             async def send_mark():
                 nonlocal mark_counter
@@ -1682,7 +1853,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                 "[CALL] ▶ Stream  sid=%s  caller=%s",
                                 stream_sid, caller,
                             )
-                            await oai({"type": "response.create"})
+                            await request_response()
 
                         elif etype == "media":
                             media = ev.get("media") or {}
@@ -1707,6 +1878,10 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             if not pending_marks and not response_active:
                                 response_start_ts_ms = None
                                 last_assistant_item = None
+                                if hangup_after_assistant:
+                                    await close_call_after_assistant()
+                                else:
+                                    arm_waiting_for_user()
 
                         elif etype == "stop":
                             logger.info("[CALL] ■ Stream stopped  sid=%s", stream_sid)
@@ -1737,6 +1912,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
                 nonlocal response_start_ts_ms, response_audio_sent, full_text
+                nonlocal awaiting_user_reply
                 vad_fallback_task: asyncio.Task | None = None
                 awaiting_vad_response = False
 
@@ -1755,7 +1931,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         and not response_cancelling
                     ):
                         logger.info("[CALL] VAD fallback -> response.create")
-                        await oai({"type": "response.create"})
+                        await request_response()
 
                 async for raw in openai_ws:
                     ev    = json.loads(raw)
@@ -1764,6 +1940,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     user_line = user_transcript_from_event(ev)
                     if user_line:
                         add_transcript_line("user", user_line)
+                        note_user_activity()
+                        schedule_user_response_fallback("transcription")
 
                     if REALTIME_LOG_EVERY_EVENT:
                         logger.info("[OAI-EVENT] %s", etype)
@@ -1771,6 +1949,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if etype == "response.created":
                         awaiting_vad_response = False
                         cancel_vad_fallback()
+                        cancel_silence_followup()
+                        cancel_user_response_fallback()
+                        awaiting_user_reply = False
                         response_active     = True
                         response_cancelling = False
                         response_audio_sent = False
@@ -1794,6 +1975,11 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                                 )
                             if response_audio_sent and stream_sid and not pending_marks:
                                 await send_mark()
+                            elif not response_audio_sent:
+                                if hangup_after_assistant:
+                                    await close_call_after_assistant()
+                                else:
+                                    arm_waiting_for_user()
                         response_active     = False
                         response_cancelling = False
                         if not pending_marks:
@@ -1828,6 +2014,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             logger.info("[MODEL-TEXT] %s", chunk)
 
                     if etype == "input_audio_buffer.speech_started" and (response_active or pending_marks):
+                        note_user_activity()
                         logger.info("[CALL] User speech detected during assistant audio")
                         await interrupt_assistant()
                         awaiting_vad_response = False
@@ -1841,6 +2028,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             try_save_from_payload(parsed, "inline-marker")
 
                     if etype == "input_audio_buffer.speech_started":
+                        note_user_activity()
                         awaiting_vad_response = False
                         cancel_vad_fallback()
                         continue
@@ -1851,7 +2039,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             and not response_active
                             and not response_cancelling
                         ):
-                            await oai({"type": "response.create"})
+                            await request_response()
                             response_active = True
                         elif TURN_DETECTION_CREATE_RESPONSE:
                             awaiting_vad_response = True
@@ -1861,6 +2049,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                     if etype in {"response.output_audio.delta", "response.audio.delta"}:
                         awaiting_vad_response = False
                         cancel_vad_fallback()
+                        cancel_user_response_fallback()
+                        cancel_silence_followup()
+                        awaiting_user_reply = False
                         audio = ev.get("delta")
                         if isinstance(audio, str) and stream_sid:
                             if response_start_ts_ms is None:
@@ -1879,6 +2070,8 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             try:
                 await asyncio.gather(receive_twilio(), send_twilio())
             finally:
+                cancel_silence_followup()
+                cancel_user_response_fallback()
                 log_call()
                 await finalize_order("bridge-finally", allow_extractor=True)
                 try:
