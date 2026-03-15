@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import mimetypes
+import re
 import websockets
 from pathlib import Path
 from datetime import datetime
@@ -199,6 +200,8 @@ CALL FLOW RUNTIME RULES:
 - Never fill silence with guesses or extra explanations.
 - Never assume an answer just because the line is quiet.
 - After every spoken reply, leave room for the caller to answer.
+- Never say an order or reservation is confirmed/placed unless you have explicitly collected and confirmed all required fields for the current path.
+- If any required detail is missing or unclear, ask for that exact missing detail instead of confirming.
 """
 
     return f"{base}\n\n{reservation_instructions}".strip()
@@ -1160,6 +1163,27 @@ def _normalize_transcript_line(value: str | None) -> str:
     return " ".join(s.split())
 
 
+def _extract_last_question(text: str | None) -> str:
+    if not text:
+        return ""
+    s = re.sub(r"\s+", " ", str(text)).strip()
+    if not s:
+        return ""
+    qpos = s.rfind("?")
+    if qpos < 0:
+        return ""
+    start = max(
+        s.rfind(". ", 0, qpos),
+        s.rfind("! ", 0, qpos),
+        s.rfind("? ", 0, qpos),
+    )
+    if start < 0:
+        start = 0
+    else:
+        start += 2
+    return s[start:qpos + 1].strip()
+
+
 def user_transcript_from_event(ev: dict) -> str:
     if not isinstance(ev, dict):
         return ""
@@ -1581,6 +1605,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             awaiting_user_reply = False
             no_input_followups_sent = 0
             last_user_activity_at = time.monotonic()
+            last_assistant_question = ""
             hangup_after_assistant = False
             call_closing = False
 
@@ -1704,11 +1729,18 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                             no_input_followups_sent,
                             NO_INPUT_MAX_FOLLOWUPS,
                         )
-                        await request_response(
-                            "The caller has not answered yet. In one short natural sentence, "
-                            "check that they are still there and repeat only the current unanswered question. "
-                            "Do not ask a new question and do not assume any missing details."
-                        )
+                        if last_assistant_question:
+                            await request_response(
+                                "The caller has not answered yet. In the same language as the conversation, "
+                                "ask if they are still there, then repeat exactly this question: "
+                                f"\"{last_assistant_question}\". Do not add any other words."
+                            )
+                        else:
+                            await request_response(
+                                "The caller has not answered yet. In one short natural sentence, "
+                                "check that they are still there and repeat only the current unanswered question. "
+                                "Do not ask a new question and do not assume any missing details."
+                            )
                     except asyncio.CancelledError:
                         pass
 
@@ -1912,7 +1944,7 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
             async def send_twilio():
                 nonlocal last_assistant_item, response_active, response_cancelling
                 nonlocal response_start_ts_ms, response_audio_sent, full_text
-                nonlocal awaiting_user_reply
+                nonlocal awaiting_user_reply, last_assistant_question
                 vad_fallback_task: asyncio.Task | None = None
                 awaiting_vad_response = False
 
@@ -1962,6 +1994,9 @@ async def handle_media_stream_with_id(websocket: WebSocket, restaurant_id: int |
                         if etype == "response.done":
                             for assistant_line in assistant_transcripts_from_response_done(ev):
                                 add_transcript_line("assistant", assistant_line)
+                                q = _extract_last_question(assistant_line)
+                                if q:
+                                    last_assistant_question = q
                             usage_obj = (ev.get("response") or {}).get("usage") or ev.get("usage")
                             if isinstance(usage_obj, dict):
                                 await asyncio.to_thread(
